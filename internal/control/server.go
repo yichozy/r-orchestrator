@@ -267,12 +267,65 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 				}
 				return status.Errorf(codes.Internal, "heartbeat agent: %v", err)
 			}
+
+			// Refresh shard updated_at so the stale reaper doesn't roll back
+			// actively-executing shards.
+			if shardID != nil && *shardID != "" && server.db != nil {
+				parsedTouch, parseErr := uuid.Parse(*shardID)
+				if parseErr == nil && (heartbeat.GetStatus() == agent_service.AgentStatusRunning ||
+					heartbeat.GetStatus() == agent_service.AgentStatusResultReady) {
+					if _, touchErr := task_shard_orm.TouchShardUpdatedAt(stream.Context(), server.db, parsedTouch, []string{
+						model.ShardStatusRunning,
+						model.ShardStatusResultReady,
+					}); touchErr != nil {
+						server.logger.Warn("failed to touch shard updated_at",
+							zap.Stringer("shard_id", parsedTouch),
+							zap.Error(touchErr),
+						)
+					}
+				}
+			}
+
 			if heartbeat.GetStatus() == agent_service.AgentStatusResultReady {
 				if shardID == nil || *shardID == "" {
 					return status.Error(codes.InvalidArgument, "result-ready heartbeat requires current_shard_id")
 				}
-				if err := server.sendFetchShardResult(streamRef, *shardID); err != nil {
-					return err
+				parsedShardID, parseErr := uuid.Parse(*shardID)
+				if parseErr != nil {
+					return status.Errorf(codes.InvalidArgument, "invalid shard_id in result-ready heartbeat: %v", parseErr)
+				}
+				if server.db != nil {
+					var shard model.TaskShard
+					if dbErr := server.db.WithContext(stream.Context()).Where("id = ?", parsedShardID).First(&shard).Error; dbErr != nil {
+						if !errors.Is(dbErr, gorm.ErrRecordNotFound) {
+							return status.Errorf(codes.Internal, "lookup shard %s for result-ready heartbeat: %v", *shardID, dbErr)
+						}
+						continue
+					} else {
+						switch shard.Status {
+						case model.ShardStatusResultReady:
+							if err := server.sendFetchShardResult(streamRef, *shardID); err != nil {
+								return err
+							}
+						case model.ShardStatusSucceeded:
+							// Shard was already stored but the agent lost the
+							// ShardResultStored ack. Re-send the ack so the
+							// agent can transition to IDLE and accept new work.
+							if err := server.sendShardResultStored(streamRef, *shardID); err != nil {
+								return err
+							}
+							if err := server.agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+								AgentID:        current_agent_id,
+								Status:         agent_service.AgentStatusIdle,
+								CurrentShardID: nil,
+							}); err != nil {
+								return status.Errorf(codes.Internal, "reset agent to idle after result-ready ack on succeeded shard: %v", err)
+							}
+							if err := server.try_assign_shard(streamRef, current_agent_id, current_tenant_id, current_backend_name); err != nil {
+							return err
+							}
+						}
+					}
 				}
 				continue
 			}
@@ -764,27 +817,41 @@ func (server *Server) ensure_agent_can_become_idle(ctx context.Context, agent_id
 		return status.Error(codes.InvalidArgument, "agent_id is required")
 	}
 
-	var active_shard model.TaskShard
+	var active_shards []model.TaskShard
 	err := server.db.WithContext(ctx).
 		Where("assigned_agent_id = ?", agent_id).
 		Where("status IN ?", []string{model.ShardStatusLeased, model.ShardStatusRunning, model.ShardStatusResultReady}).
-		Order("started_at desc NULLS LAST").
-		Order("id asc").
-		First(&active_shard).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+		Find(&active_shards).Error
+	if err != nil {
+		return status.Errorf(codes.Internal, "load active shards for agent %s: %v", agent_id, err)
+	}
+	if len(active_shards) == 0 {
 		return nil
 	}
-	if err != nil {
-		return status.Errorf(codes.Internal, "load active shard for agent %s: %v", agent_id, err)
+
+	// Agent reports IDLE but server has non-terminal shards assigned to it.
+	// The agent likely restarted and lost its in-memory state (no PVC).
+	// Roll back all such shards to QUEUED so they can be re-assigned.
+	for _, shard := range active_shards {
+		server.logger.Warn("rolling back orphaned shard on agent IDLE report",
+			zap.String("agent_id", agent_id),
+			zap.Stringer("shard_id", shard.ID),
+			zap.String("shard_status", shard.Status),
+		)
+		if rollbackErr := task_shard_orm.UpdateShardStatus(ctx, server.db, task_shard_orm.UpdateShardStatusParams{
+			ShardID:         shard.ID,
+			Status:          model.ShardStatusQueued,
+			CurrentStatuses: []string{shard.Status},
+			ClearAgent:      true,
+		}); rollbackErr != nil {
+			server.logger.Error("failed to roll back orphaned shard",
+				zap.Stringer("shard_id", shard.ID),
+				zap.Error(rollbackErr),
+			)
+		}
 	}
 
-	return status.Errorf(
-		codes.FailedPrecondition,
-		"agent %s cannot report IDLE while shard %s is %s",
-		agent_id,
-		active_shard.ID,
-		active_shard.Status,
-	)
+	return nil
 }
 
 func metadataAgentID(ctx context.Context) (string, error) {
@@ -907,6 +974,11 @@ func (server *Server) validate_shard_result_data_report(
 		if hasOutput {
 			return true, nil
 		}
+	case model.ShardStatusCancelled, model.ShardStatusFailed:
+		// Shard was cancelled or failed while the agent was executing.
+		// Treat as duplicate ack so the agent receives ShardResultStored
+		// and transitions to IDLE gracefully.
+		return true, nil
 	}
 
 	return false, status.Errorf(codes.FailedPrecondition, "store shard result data requires shard %s to be %s, got %s", shard_id, model.ShardStatusResultReady, shard.Status)

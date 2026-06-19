@@ -188,8 +188,8 @@ func TestServerAcksDuplicateShardResultDataAfterStoredAckLoss(t *testing.T) {
 		t.Fatalf("OpenControlStream() error = %v", err)
 	}
 
-	assertServerSentCount(t, stream.sentMessages, "FetchShardResult", shardID.String(), 2)
-	assertServerSentCount(t, stream.sentMessages, "ShardResultStored", shardID.String(), 2)
+	assertServerSentCount(t, stream.sentMessages, "FetchShardResult", shardID.String(), 1)
+	assertServerSentCount(t, stream.sentMessages, "ShardResultStored", shardID.String(), 3)
 	assertShardStatus(t, ctx, db, shardID, model.ShardStatusSucceeded)
 	assertShardOutputStored(t, ctx, db, taskID, 0, string(outputCSV))
 

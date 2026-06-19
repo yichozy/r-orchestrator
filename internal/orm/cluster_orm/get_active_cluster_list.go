@@ -7,11 +7,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// GetActiveClusterList 列出所有 ACTIVE 状态的 Cluster。
+// GetActiveClusterList 列出所有 ACTIVE 和 PROVISIONING 状态的 Cluster。
 func GetActiveClusterList(ctx context.Context, db *gorm.DB) ([]model.Cluster, error) {
 	var clusters []model.Cluster
 	err := db.WithContext(ctx).
-		Where("status = ?", model.ClusterStatusActive).
+		Where("status IN ?", []model.ClusterStatus{model.ClusterStatusActive, model.ClusterStatusProvisioning}).
 		Find(&clusters).Error
 
 	if err != nil {

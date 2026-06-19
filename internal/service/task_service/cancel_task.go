@@ -33,7 +33,7 @@ func CancelTask(ctx context.Context, tenantName string, taskID uuid.UUID) error 
 		return err
 	}
 
-	// Collect running shards with assigned agents before cancelling.
+	// Collect shards with assigned agents before cancelling.
 	var runningShards []struct {
 		AssignedAgentID string
 		ID              uuid.UUID
@@ -42,7 +42,7 @@ func CancelTask(ctx context.Context, tenantName string, taskID uuid.UUID) error 
 		Model(&model.TaskShard{}).
 		Select("assigned_agent_id, id").
 		Where("task_id = ?", taskID).
-		Where("status = ?", model.ShardStatusRunning).
+		Where("status IN ?", []string{model.ShardStatusLeased, model.ShardStatusRunning, model.ShardStatusResultReady}).
 		Where("assigned_agent_id IS NOT NULL").
 		Find(&runningShards).Error; err != nil {
 		return err

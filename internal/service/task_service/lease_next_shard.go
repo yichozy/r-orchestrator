@@ -26,7 +26,8 @@ func LeaseNextShard(ctx context.Context, tenantID uuid.UUID, backendName string,
 	}
 
 	err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		for {
+		const maxRetries = 100
+		for i := 0; i < maxRetries; i++ {
 			var shard model.TaskShard
 			if err := tx.Model(&model.TaskShard{}).
 				Joins("JOIN tasks ON tasks.id = task_shards.task_id").
@@ -57,6 +58,20 @@ func LeaseNextShard(ctx context.Context, tenantID uuid.UUID, backendName string,
 				task.Status = model.TaskStatusQueued
 			}
 
+			// Re-check task status before leasing: the task may have been
+			// cancelled between the initial SELECT and this UPDATE.
+			taskActive := false
+			for _, s := range shardQueryStatuses {
+				if task.Status == s {
+					taskActive = true
+					break
+				}
+			}
+			if !taskActive {
+				// Task was cancelled; retry to find a different shard.
+				continue
+			}
+
 			result := tx.Model(&model.TaskShard{}).
 				Where("id = ? AND status = ?", shard.ID, model.ShardStatusQueued).
 				Updates(map[string]any{
@@ -78,6 +93,7 @@ func LeaseNextShard(ctx context.Context, tenantID uuid.UUID, backendName string,
 			leasedShard = shard
 			return nil
 		}
+		return fmt.Errorf("lease next shard: exhausted %d retry attempts", maxRetries)
 	})
 	if err != nil {
 		return model.Task{}, model.TaskShard{}, fmt.Errorf("lease next shard: %w", err)

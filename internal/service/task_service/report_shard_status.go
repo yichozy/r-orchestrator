@@ -117,7 +117,7 @@ func ReportShardStatus(ctx context.Context, params ReportShardStatusParams) erro
 			}
 			payload, err := RecomputeTaskStatus(ctx, tx, shard.TaskID, lastError)
 			if err != nil {
-				return err
+				return fmt.Errorf("recompute task status after shard %s: %w", params.ShardStatus, err)
 			}
 			hookPayload = payload
 		}
