@@ -3,11 +3,11 @@ replicaCount: 1
 image:
   orchestrator:
     repository: registry-vpc.ap-southeast-1.aliyuncs.com/knewta/r-orchestrator
-    tag: 0.1.0
+    tag: v0.1.0
     pullPolicy: IfNotPresent
   agent:
     repository: registry-vpc.ap-southeast-1.aliyuncs.com/knewta/r-agent
-    tag: 0.1.0
+    tag: v0.1.0
     pullPolicy: IfNotPresent
   pullSecrets: []
   #  - name: aliyun-registry

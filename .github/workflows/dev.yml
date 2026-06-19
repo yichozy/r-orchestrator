@@ -13,36 +13,14 @@ env:
   REGISTRY_NAMESPACE: knewta
   SERVER_IMAGE_NAME: r-orchestrator
   AGENT_IMAGE_NAME: r-agent
-  DEPLOYMENT_NAME: r-orchestrator
-  CONTAINER_NAME: server
-  NAMESPACE: yi-dev
   VERSION: ${{ github.ref_name }}
-  K8S_CONTEXT: sg
-  IMG_ALIYUN_REGISTRY_VPC: ${{ vars.ALIYUN_REGISTRY_SG_VPC }}
   IMG_ALIYUN_REGISTRY: ${{ vars.ALIYUN_REGISTRY_SG }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Check env variable
-        run: echo "VERSION=${{ env.VERSION }} DEPLOYMENT=${{ env.DEPLOYMENT_NAME }} NAMESPACE=${{ env.NAMESPACE }}"
-
       - uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Run Go tests
-        run: go test ./...
-
-      - name: Run agent tests
-        run: cargo test -p agent
 
       - name: Login to Aliyun Registry
         run: echo "${{ secrets.ALIYUN_REGISTRY_PASSWORD }}" | docker login --username "${{ secrets.ALIYUN_REGISTRY_USERNAME }}" --password-stdin "${{ env.IMG_ALIYUN_REGISTRY }}"
@@ -66,27 +44,3 @@ jobs:
 
       - name: Push agent image
         run: docker push ${{ env.IMG_ALIYUN_REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/${{ env.AGENT_IMAGE_NAME }}:${{ env.VERSION }}
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Install kubectl
-        run: |
-          curl -fsSL -o kubectl https://dl.k8s.io/release/v1.33.1/bin/linux/amd64/kubectl
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/kubectl
-
-      - name: Update the image in the k8s cluster
-        env:
-          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
-        run: |
-          echo "Updating the image ${{ env.IMG_ALIYUN_REGISTRY_VPC }}/${{ env.REGISTRY_NAMESPACE }}/${{ env.SERVER_IMAGE_NAME }}:${{ env.VERSION }}"
-          tmp_kubeconfig="$(mktemp)"
-          trap 'rm -f "$tmp_kubeconfig"' EXIT
-          printf '%s' "$KUBE_CONFIG" > "$tmp_kubeconfig"
-          export KUBECONFIG="$tmp_kubeconfig"
-          kubectl config use-context "${{ env.K8S_CONTEXT }}"
-          kubectl set image deployment/${{ env.DEPLOYMENT_NAME }} \
-            ${{ env.CONTAINER_NAME }}=${{ env.IMG_ALIYUN_REGISTRY_VPC }}/${{ env.REGISTRY_NAMESPACE }}/${{ env.SERVER_IMAGE_NAME }}:${{ env.VERSION }} \
-            -n ${{ env.NAMESPACE }}
