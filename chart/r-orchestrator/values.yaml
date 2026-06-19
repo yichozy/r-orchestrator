@@ -33,14 +33,16 @@ database:
     usernameKey: R_ORCHESTRATOR_POSTGRES_USERNAME
     passwordKey: R_ORCHESTRATOR_POSTGRES_PASSWORD
 
-secret:
-  agentToken: ""
-
-k8s:
-  enabled: true
-  namespace: r-agents
-  kubeConfigPath: ""
-  agentLogLevel: "info"
-  agentParallelism: "1"
+cluster:
   billingCycleSeconds: 3600
   billingAdvanceSeconds: 180
+  agentToken: ""
+  agentImage: ""
+  agentLogLevel: "info"
+  agentParallelism: "1"
+  kubernetes:
+    enabled: true
+    namespace: r-agents
+    kubeConfigPath: ""
+    imagePullSecrets: []
+    #  - name: aliyun-registry

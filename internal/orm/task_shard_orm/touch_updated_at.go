@@ -18,7 +18,7 @@ func TouchShardUpdatedAt(ctx context.Context, db *gorm.DB, shardID uuid.UUID, ac
 		Model(&model.TaskShard{}).
 		Where("id = ?", shardID).
 		Where("status IN ?", activeStatuses).
-		Update("updated_at", time.Now().UTC())
+		Update("updated_at", time.Now())
 	if result.Error != nil {
 		return false, fmt.Errorf("touch shard updated_at: %w", result.Error)
 	}

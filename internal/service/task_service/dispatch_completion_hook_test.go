@@ -232,7 +232,7 @@ func TestRecordCompletionHookResultDoesNotOverwriteDeliveredTask(t *testing.T) {
 
 	tenantID := uuid.New()
 	taskID := uuid.New()
-	deliveredAt := time.Now().UTC().Add(-time.Minute)
+	deliveredAt := time.Now().Add(-time.Minute)
 	mustCreateTenant(t, ctx, db, tenantID)
 	mustCreateTask(t, ctx, db, model.Task{
 		BaseUUIDModel:     model.BaseUUIDModel{ID: taskID},

@@ -7,6 +7,7 @@ package graph
 
 import (
 	"context"
+	"fmt"
 
 	gqlmodel "github.com/yichozy/r-orchestrator/graph/model"
 	"github.com/yichozy/r-orchestrator/internal/model"
@@ -19,6 +20,10 @@ func (r *mutationResolver) CreateTenant(ctx context.Context, input gqlmodel.Crea
 	db, err := orm.GetDB()
 	if err != nil {
 		return nil, err
+	}
+
+	if input.MaxAgents <= 0 {
+		return nil, fmt.Errorf("max_agents must be positive")
 	}
 
 	tenant, err := tenant_orm.Create(ctx, db, model.Tenant{

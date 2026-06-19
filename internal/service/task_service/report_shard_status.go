@@ -33,7 +33,7 @@ func ReportShardStatus(ctx context.Context, params ReportShardStatusParams) erro
 		return err
 	}
 
-	now := time.Now().UTC()
+	now := time.Now()
 	var hookPayload *CompletionHookPayload
 
 	err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

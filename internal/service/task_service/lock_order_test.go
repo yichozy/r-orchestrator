@@ -175,7 +175,7 @@ func TestCancelTaskSetsFinishedAtAndClearsRuntimeFieldsForCancelledShards(t *tes
 	tenantName := "cancel-runtime-team"
 	taskID := uuid.New()
 	shardID := uuid.New()
-	startedAt := time.Now().UTC().Add(-time.Minute)
+	startedAt := time.Now().Add(-time.Minute)
 	mustCreateTenantWithName(t, ctx, db, tenantID, tenantName)
 	mustCreateTask(t, ctx, db, model.Task{
 		BaseUUIDModel: model.BaseUUIDModel{ID: taskID},

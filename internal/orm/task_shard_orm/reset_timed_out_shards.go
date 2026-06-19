@@ -9,9 +9,9 @@ import (
 	"gorm.io/gorm"
 )
 
-// RollbackStaleShards rolls back LEASED/RUNNING/RESULT_READY shards whose updated_at is before
-// threshold and whose assigned agent is not in activeAgentIDs.
-func RollbackStaleShards(ctx context.Context, db *gorm.DB, activeAgentIDs []string, threshold time.Time) (int, error) {
+// ResetTimedOutShards resets LEASED/RUNNING/RESULT_READY shards whose updated_at is before
+// threshold and whose assigned agent is not in activeAgentIDs back to QUEUED.
+func ResetTimedOutShards(ctx context.Context, db *gorm.DB, activeAgentIDs []string, threshold time.Time) (int, error) {
 	query := db.WithContext(ctx).
 		Model(&model.TaskShard{}).
 		Where("status IN ?", []string{model.ShardStatusLeased, model.ShardStatusRunning, model.ShardStatusResultReady}).
@@ -29,7 +29,7 @@ func RollbackStaleShards(ctx context.Context, db *gorm.DB, activeAgentIDs []stri
 		"last_error":        "",
 	})
 	if result.Error != nil {
-		return 0, fmt.Errorf("rollback stale shards: %w", result.Error)
+		return 0, fmt.Errorf("reset timed out shards: %w", result.Error)
 	}
 
 	return int(result.RowsAffected), nil

@@ -12,7 +12,7 @@ func TestLoadEnvVariableSkipsDotEnvInProd(t *testing.T) {
 		t.Fatalf("get working directory: %v", err)
 	}
 	tempDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tempDir, ".env"), []byte("AGENT_TOKEN=from-dotenv\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(tempDir, ".env"), []byte("CLUSTER_AGENT_TOKEN=from-dotenv\n"), 0o644); err != nil {
 		t.Fatalf("write .env: %v", err)
 	}
 	if err := os.Chdir(tempDir); err != nil {
@@ -24,12 +24,12 @@ func TestLoadEnvVariableSkipsDotEnvInProd(t *testing.T) {
 		}
 	})
 	t.Setenv("ENV", "prod")
-	t.Setenv("AGENT_TOKEN", "")
+	t.Setenv("CLUSTER_AGENT_TOKEN", "")
 
 	if err := LoadEnvVariable(); err != nil {
 		t.Fatalf("expected prod mode to skip .env loading, got %v", err)
 	}
-	if got := os.Getenv("AGENT_TOKEN"); got != "" {
+	if got := os.Getenv("CLUSTER_AGENT_TOKEN"); got != "" {
 		t.Fatalf("expected prod mode to leave AGENT_TOKEN untouched, got %q", got)
 	}
 }
@@ -51,7 +51,7 @@ func TestLoadEnvVariableDoesNotRequireDotEnvWhenEnvironmentIsComplete(t *testing
 	t.Setenv("ENV", "")
 	t.Setenv("SERVER_HTTP_ADDR", "")
 	t.Setenv("SERVER_GRPC_ADDR", "")
-	t.Setenv("AGENT_TOKEN", "token-1")
+	t.Setenv("CLUSTER_AGENT_TOKEN", "token-1")
 	t.Setenv("DB_HOST", "localhost")
 	t.Setenv("DB_PORT", "5432")
 	t.Setenv("DB_USER", "tester")
@@ -72,7 +72,7 @@ func TestLoadEnvVariablePrefersExplicitEnvironmentOverDotEnv(t *testing.T) {
 		t.Fatalf("get working directory: %v", err)
 	}
 	tempDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tempDir, ".env"), []byte("AGENT_TOKEN=from-dotenv\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(tempDir, ".env"), []byte("CLUSTER_AGENT_TOKEN=from-dotenv\n"), 0o644); err != nil {
 		t.Fatalf("write .env: %v", err)
 	}
 	if err := os.Chdir(tempDir); err != nil {
@@ -84,12 +84,12 @@ func TestLoadEnvVariablePrefersExplicitEnvironmentOverDotEnv(t *testing.T) {
 		}
 	})
 	t.Setenv("ENV", "")
-	t.Setenv("AGENT_TOKEN", "from-env")
+	t.Setenv("CLUSTER_AGENT_TOKEN", "from-env")
 
 	if err := LoadEnvVariable(); err != nil {
 		t.Fatalf("expected .env load to succeed, got %v", err)
 	}
-	if got := os.Getenv("AGENT_TOKEN"); got != "from-env" {
+	if got := os.Getenv("CLUSTER_AGENT_TOKEN"); got != "from-env" {
 		t.Fatalf("expected explicit environment variable to win, got %q", got)
 	}
 }

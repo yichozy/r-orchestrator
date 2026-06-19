@@ -19,7 +19,7 @@ func IsNearBoundary(cluster model.Cluster, threshold time.Duration) bool {
 
 // IsExpired 判断计费边界是否已过。
 func IsExpired(cluster model.Cluster) bool {
-	return time.Now().UTC().After(cluster.NextBillingBoundaryAt)
+	return time.Now().After(cluster.NextBillingBoundaryAt)
 }
 
 // ShouldTerminate 判断 cluster 是否应被销毁：

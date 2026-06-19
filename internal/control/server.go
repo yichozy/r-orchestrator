@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/yichozy/r-orchestrator/internal/model"
@@ -27,98 +25,28 @@ import (
 
 type Server struct {
 	controlv1.UnimplementedControlServiceServer
-	db             *gorm.DB
-	agent_service  *agent_service.Service
-	expected_token string
-	logger         *zap.Logger
-	streams        sync.Map // map[string]*agentStream
-	storeOutputFn  func(ctx context.Context, tx *gorm.DB, tenantID, shardID uuid.UUID, outputCSV []byte) error
-}
-
-type agentStream struct {
-	stream grpc.BidiStreamingServer[controlv1.AgentMessage, controlv1.ServerMessage]
-	sendMu sync.Mutex
-}
-
-func (stream *agentStream) Send(message *controlv1.ServerMessage) error {
-	stream.sendMu.Lock()
-	defer stream.sendMu.Unlock()
-	return stream.stream.Send(message)
-}
-
-func (stream *agentStream) Context() context.Context {
-	return stream.stream.Context()
-}
-
-func (stream *agentStream) SendWithContext(ctx context.Context, message *controlv1.ServerMessage) error {
-	result := make(chan error, 1)
-	go func() {
-		result <- stream.Send(message)
-	}()
-
-	select {
-	case err := <-result:
-		return err
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	db            *gorm.DB
+	agentService  *agent_service.Service
+	expectedToken string
+	logger        *zap.Logger
+	streams       sync.Map // map[string]*agentStream
+	storeOutputFn func(ctx context.Context, tx *gorm.DB, tenantID, shardID uuid.UUID, outputCSV []byte) error
 }
 
 func NewServer(db *gorm.DB, agent_service *agent_service.Service, expected_token string) *Server {
 	return &Server{
-		db:             db,
-		agent_service:  agent_service,
-		expected_token: expected_token,
-		logger:         zap.L().Named("control"),
+		db:            db,
+		agentService:  agent_service,
+		expectedToken: expected_token,
+		logger:        zap.L().Named("control"),
 	}
-}
-
-func ValidateAgentToken(tenantID uuid.UUID, got, want string) error {
-	if got != want {
-		return fmt.Errorf("tenant %s token mismatch", tenantID)
-	}
-	return nil
 }
 
 func (server *Server) SetStoreShardOutputFunc(fn func(ctx context.Context, tx *gorm.DB, tenantID, shardID uuid.UUID, outputCSV []byte) error) {
 	server.storeOutputFn = fn
 }
 
-func ValidateMetadataToken(ctx context.Context, want string) error {
-	got, err := metadataToken(ctx)
-	if err != nil {
-		return err
-	}
-	if got != want {
-		return fmt.Errorf("agent token mismatch")
-	}
-	return nil
-}
-
-func metadataToken(ctx context.Context) (string, error) {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return "", fmt.Errorf("authorization metadata is required")
-	}
-
-	for _, value := range md.Get("authorization") {
-		if token, ok := strings.CutPrefix(value, "Bearer "); ok && token != "" {
-			return token, nil
-		}
-	}
-	for _, key := range []string{"x-agent-token", "agent-token"} {
-		if values := md.Get(key); len(values) > 0 && values[0] != "" {
-			return values[0], nil
-		}
-	}
-	return "", fmt.Errorf("authorization metadata is required")
-}
-
 func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv1.AgentMessage, controlv1.ServerMessage]) error {
-	if server.agent_service == nil {
-		return status.Error(codes.FailedPrecondition, "agent service is not configured")
-	}
-
 	var current_agent_id string
 	var current_tenant_id uuid.UUID
 	var current_backend_name string
@@ -146,11 +74,11 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 		return status.Errorf(codes.InvalidArgument, "invalid tenant_id: %v", err)
 	}
 
-	if err := ValidateAgentToken(tenantID, register.GetToken(), server.expected_token); err != nil {
-		return status.Error(codes.Unauthenticated, err.Error())
+	if register.GetToken() != server.expectedToken {
+		return status.Error(codes.Unauthenticated, fmt.Errorf("tenant %s token mismatch", tenantID).Error())
 	}
 
-	if err := server.agent_service.RegisterAgent(agent_service.RegisterAgentParams{
+	if err := server.agentService.RegisterAgent(agent_service.RegisterAgentParams{
 		AgentID:     current_agent_id,
 		TenantID:    tenantID,
 		BackendName: register.GetBackendName(),
@@ -172,7 +100,7 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 	server.streams.Store(current_agent_id, streamRef)
 	defer func() {
 		server.streams.Delete(current_agent_id)
-		server.agent_service.DisconnectAgent(current_agent_id)
+		server.agentService.DisconnectAgent(current_agent_id)
 	}()
 
 	server.logger.Info("agent connected",
@@ -181,11 +109,11 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 		zap.String("backend", current_backend_name),
 	)
 
-	registered_agent, err := server.agent_service.GetAgent(current_agent_id)
+	registered_agent, err := server.agentService.GetAgent(current_agent_id)
 	if err != nil {
 		return status.Errorf(codes.Internal, "get registered agent: %v", err)
 	}
-	registered_agent, err = server.reconcileRegisteredAgentState(stream.Context(), registered_agent)
+	registered_agent, err = server.validateReconnectedAgent(stream.Context(), registered_agent)
 	if err != nil {
 		return err
 	}
@@ -195,7 +123,7 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 			return err
 		}
 		if restored {
-			registered_agent, err = server.agent_service.GetAgent(current_agent_id)
+			registered_agent, err = server.agentService.GetAgent(current_agent_id)
 			if err != nil {
 				return status.Errorf(codes.Internal, "get restored agent: %v", err)
 			}
@@ -206,7 +134,7 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 			return err
 		}
 	} else if shouldTryAssign(registered_agent) {
-		if err := server.try_assign_shard(streamRef, current_agent_id, current_tenant_id, current_backend_name); err != nil {
+		if err := server.tryAssignShard(streamRef, current_agent_id, current_tenant_id, current_backend_name); err != nil {
 			return err
 		}
 	}
@@ -257,7 +185,7 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 				shardID = &sid
 			}
 
-			if err := server.agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+			if err := server.agentService.HeartbeatAgent(agent_service.HeartbeatAgentParams{
 				AgentID:        current_agent_id,
 				Status:         heartbeat.GetStatus(),
 				CurrentShardID: shardID,
@@ -314,15 +242,15 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 							if err := server.sendShardResultStored(streamRef, *shardID); err != nil {
 								return err
 							}
-							if err := server.agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+							if err := server.agentService.HeartbeatAgent(agent_service.HeartbeatAgentParams{
 								AgentID:        current_agent_id,
 								Status:         agent_service.AgentStatusIdle,
 								CurrentShardID: nil,
 							}); err != nil {
 								return status.Errorf(codes.Internal, "reset agent to idle after result-ready ack on succeeded shard: %v", err)
 							}
-							if err := server.try_assign_shard(streamRef, current_agent_id, current_tenant_id, current_backend_name); err != nil {
-							return err
+							if err := server.tryAssignShard(streamRef, current_agent_id, current_tenant_id, current_backend_name); err != nil {
+								return err
 							}
 						}
 					}
@@ -330,7 +258,7 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 				continue
 			}
 			if heartbeat.GetStatus() == agent_service.AgentStatusIdle {
-				if err := server.try_assign_shard(streamRef, current_agent_id, current_tenant_id, current_backend_name); err != nil {
+				if err := server.tryAssignShard(streamRef, current_agent_id, current_tenant_id, current_backend_name); err != nil {
 					return err
 				}
 			}
@@ -351,13 +279,13 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 				return status.Errorf(codes.InvalidArgument, "invalid shard_id: %v", err)
 			}
 			shardIDStr := shardID.String()
-			if err := server.validate_shard_report(stream.Context(), shardID, current_agent_id, current_tenant_id, current_backend_name, model.ShardStatusLeased, "mark shard started"); err != nil {
+			if err := server.validateShardReport(stream.Context(), shardID, current_agent_id, current_tenant_id, current_backend_name, model.ShardStatusLeased, "mark shard started"); err != nil {
 				return err
 			}
 			if err := task_service.ReportShardStatus(stream.Context(), task_service.ReportShardStatusParams{ShardID: shardID, ShardStatus: model.ShardStatusRunning}); err != nil {
 				return status.Errorf(codes.Internal, "mark shard started: %v", err)
 			}
-			if err := server.agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+			if err := server.agentService.HeartbeatAgent(agent_service.HeartbeatAgentParams{
 				AgentID:        current_agent_id,
 				Status:         model.ShardStatusRunning,
 				CurrentShardID: &shardIDStr,
@@ -377,7 +305,7 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 				return status.Errorf(codes.InvalidArgument, "invalid shard_id: %v", err)
 			}
 			shardIDStr := shardID.String()
-			if err := server.validate_shard_report(stream.Context(), shardID, current_agent_id, current_tenant_id, current_backend_name, model.ShardStatusRunning, "mark shard result ready"); err != nil {
+			if err := server.validateShardReport(stream.Context(), shardID, current_agent_id, current_tenant_id, current_backend_name, model.ShardStatusRunning, "mark shard result ready"); err != nil {
 				return err
 			}
 			if err := task_service.ReportShardStatus(stream.Context(), task_service.ReportShardStatusParams{
@@ -386,7 +314,7 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 			}); err != nil {
 				return status.Errorf(codes.Internal, "mark shard result ready: %v", err)
 			}
-			if err := server.agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+			if err := server.agentService.HeartbeatAgent(agent_service.HeartbeatAgentParams{
 				AgentID:        current_agent_id,
 				Status:         agent_service.AgentStatusResultReady,
 				CurrentShardID: &shardIDStr,
@@ -408,7 +336,7 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 			if err != nil {
 				return status.Errorf(codes.InvalidArgument, "invalid shard_id: %v", err)
 			}
-			duplicateAck, err := server.validate_shard_result_data_report(stream.Context(), shardID, current_agent_id, current_tenant_id, current_backend_name)
+			duplicateAck, err := server.validateShardResultDataReport(stream.Context(), shardID, current_agent_id, current_tenant_id, current_backend_name)
 			if err != nil {
 				return err
 			}
@@ -416,14 +344,14 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 				if err := server.sendShardResultStored(streamRef, shardID.String()); err != nil {
 					return err
 				}
-				if err := server.agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+				if err := server.agentService.HeartbeatAgent(agent_service.HeartbeatAgentParams{
 					AgentID:        current_agent_id,
 					Status:         agent_service.AgentStatusIdle,
 					CurrentShardID: nil,
 				}); err != nil {
 					return status.Errorf(codes.Internal, "update agent idle state after duplicate shard result data: %v", err)
 				}
-				if err := server.try_assign_shard(streamRef, current_agent_id, current_tenant_id, current_backend_name); err != nil {
+				if err := server.tryAssignShard(streamRef, current_agent_id, current_tenant_id, current_backend_name); err != nil {
 					return err
 				}
 				continue
@@ -449,14 +377,14 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 			if err := server.sendShardResultStored(streamRef, shardID.String()); err != nil {
 				return err
 			}
-			if err := server.agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+			if err := server.agentService.HeartbeatAgent(agent_service.HeartbeatAgentParams{
 				AgentID:        current_agent_id,
 				Status:         agent_service.AgentStatusIdle,
 				CurrentShardID: nil,
 			}); err != nil {
 				return status.Errorf(codes.Internal, "update agent idle state: %v", err)
 			}
-			if err := server.try_assign_shard(streamRef, current_agent_id, current_tenant_id, current_backend_name); err != nil {
+			if err := server.tryAssignShard(streamRef, current_agent_id, current_tenant_id, current_backend_name); err != nil {
 				return err
 			}
 			continue
@@ -471,7 +399,7 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 			if err != nil {
 				return status.Errorf(codes.InvalidArgument, "invalid shard_id: %v", err)
 			}
-			if err := server.validate_shard_report(stream.Context(), shardID, current_agent_id, current_tenant_id, current_backend_name, model.ShardStatusRunning, "mark shard failed"); err != nil {
+			if err := server.validateShardReport(stream.Context(), shardID, current_agent_id, current_tenant_id, current_backend_name, model.ShardStatusRunning, "mark shard failed"); err != nil {
 				return err
 			}
 			errMsg := shard_failed.GetErrorMessage()
@@ -482,7 +410,7 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 			}); err != nil {
 				return status.Errorf(codes.Internal, "mark shard failed: %v", err)
 			}
-			if err := server.agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+			if err := server.agentService.HeartbeatAgent(agent_service.HeartbeatAgentParams{
 				AgentID:        current_agent_id,
 				Status:         agent_service.AgentStatusIdle,
 				CurrentShardID: nil,
@@ -494,7 +422,7 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 				zap.Stringer("shard_id", shardID),
 				zap.String("error", shard_failed.GetErrorMessage()),
 			)
-			if err := server.try_assign_shard(streamRef, current_agent_id, current_tenant_id, current_backend_name); err != nil {
+			if err := server.tryAssignShard(streamRef, current_agent_id, current_tenant_id, current_backend_name); err != nil {
 				return err
 			}
 			continue
@@ -505,13 +433,13 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 }
 
 func (server *Server) FetchArtifact(request *controlv1.FetchArtifactRequest, stream grpc.ServerStreamingServer[controlv1.FetchArtifactChunk]) error {
-	if server.agent_service == nil {
+	if server.agentService == nil {
 		return status.Error(codes.FailedPrecondition, "agent service is not configured")
 	}
 	if server.db == nil {
 		return status.Error(codes.FailedPrecondition, "db is not configured")
 	}
-	if err := ValidateMetadataToken(stream.Context(), server.expected_token); err != nil {
+	if err := ValidateMetadataToken(stream.Context(), server.expectedToken); err != nil {
 		return status.Error(codes.Unauthenticated, err.Error())
 	}
 	if request.GetArtifactId() == "" {
@@ -568,7 +496,7 @@ func (server *Server) FetchArtifact(request *controlv1.FetchArtifactRequest, str
 	return nil
 }
 
-func (server *Server) try_assign_shard(
+func (server *Server) tryAssignShard(
 	stream *agentStream,
 	agent_id string, tenant_id uuid.UUID, backend_name string,
 ) (ret_err error) {
@@ -593,7 +521,7 @@ func (server *Server) try_assign_shard(
 		if !should_rollback {
 			return
 		}
-		if rollback_err := server.rollback_assigned_shard(stream.Context(), task, shard, agent_id); rollback_err != nil {
+		if rollback_err := server.rollbackAssignedShard(stream.Context(), task, shard, agent_id); rollback_err != nil {
 			if ret_err == nil {
 				ret_err = status.Errorf(codes.Internal, "rollback assigned shard: %v", rollback_err)
 				return
@@ -603,7 +531,7 @@ func (server *Server) try_assign_shard(
 	}()
 
 	shardIDStr := shard.ID.String()
-	if err := server.agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+	if err := server.agentService.HeartbeatAgent(agent_service.HeartbeatAgentParams{
 		AgentID:        agent_id,
 		Status:         agent_service.AgentStatusRunning,
 		CurrentShardID: &shardIDStr,
@@ -636,7 +564,7 @@ func (server *Server) try_assign_shard(
 	return nil
 }
 
-func (server *Server) rollback_assigned_shard(ctx context.Context, task model.Task, shard model.TaskShard, agent_id string) error {
+func (server *Server) rollbackAssignedShard(ctx context.Context, task model.Task, shard model.TaskShard, agent_id string) error {
 	if err := server.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&model.TaskShard{}).
 			Where("id = ? AND status = ? AND assigned_agent_id = ?", shard.ID, model.ShardStatusLeased, agent_id).
@@ -680,7 +608,7 @@ func (server *Server) rollback_assigned_shard(ctx context.Context, task model.Ta
 		return err
 	}
 
-	if err := server.agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+	if err := server.agentService.HeartbeatAgent(agent_service.HeartbeatAgentParams{
 		AgentID:        agent_id,
 		Status:         agent_service.AgentStatusIdle,
 		CurrentShardID: nil,
@@ -724,7 +652,7 @@ func (server *Server) restoreResultReadyAgentFromDB(
 	}
 
 	shardID := shard.ID.String()
-	if err := server.agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+	if err := server.agentService.HeartbeatAgent(agent_service.HeartbeatAgentParams{
 		AgentID:        agentID,
 		Status:         agent_service.AgentStatusResultReady,
 		CurrentShardID: &shardID,
@@ -742,7 +670,12 @@ func (server *Server) restoreResultReadyAgentFromDB(
 	return true, nil
 }
 
-func (server *Server) reconcileRegisteredAgentState(ctx context.Context, agent agent_service.Agent) (agent_service.Agent, error) {
+// validateReconnectedAgent checks that a reconnecting agent's in-memory state
+// is still consistent with the database. Agents have no PVC so state is lost
+// on restart. If the server still records the agent as RUNNING/RESULT_READY but
+// the shard no longer matches (e.g. rolled back by the stale reaper),
+// the agent is reset to IDLE.
+func (server *Server) validateReconnectedAgent(ctx context.Context, agent agent_service.Agent) (agent_service.Agent, error) {
 	switch agent.Status {
 	case agent_service.AgentStatusRunning, agent_service.AgentStatusResultReady:
 	default:
@@ -750,19 +683,19 @@ func (server *Server) reconcileRegisteredAgentState(ctx context.Context, agent a
 	}
 
 	if agent.CurrentShardID == nil || *agent.CurrentShardID == "" {
-		return server.resetRegisteredAgentToIdle(agent.ID)
+		return server.ResetRegisteredAgentToIdle(agent.ID)
 	}
 
 	shardID, err := uuid.Parse(*agent.CurrentShardID)
 	if err != nil {
-		return server.resetRegisteredAgentToIdle(agent.ID)
+		return server.ResetRegisteredAgentToIdle(agent.ID)
 	}
 
 	shard, err := server.load_validated_shard(ctx, shardID, agent.ID, agent.TenantID, agent.BackendName)
 	if err != nil {
 		switch status.Code(err) {
 		case codes.NotFound, codes.PermissionDenied:
-			return server.resetRegisteredAgentToIdle(agent.ID)
+			return server.ResetRegisteredAgentToIdle(agent.ID)
 		default:
 			return agent_service.Agent{}, err
 		}
@@ -782,28 +715,11 @@ func (server *Server) reconcileRegisteredAgentState(ctx context.Context, agent a
 				return agent, nil
 			}
 		}
-		return server.resetRegisteredAgentToIdle(agent.ID)
+		return server.ResetRegisteredAgentToIdle(agent.ID)
 	case agent_service.AgentStatusRunning:
 		if shard.Status != model.ShardStatusLeased && shard.Status != model.ShardStatusRunning {
-			return server.resetRegisteredAgentToIdle(agent.ID)
+			return server.ResetRegisteredAgentToIdle(agent.ID)
 		}
-	}
-
-	return agent, nil
-}
-
-func (server *Server) resetRegisteredAgentToIdle(agentID string) (agent_service.Agent, error) {
-	if err := server.agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
-		AgentID:        agentID,
-		Status:         agent_service.AgentStatusIdle,
-		CurrentShardID: nil,
-	}); err != nil {
-		return agent_service.Agent{}, status.Errorf(codes.Internal, "reset stale agent state: %v", err)
-	}
-
-	agent, err := server.agent_service.GetAgent(agentID)
-	if err != nil {
-		return agent_service.Agent{}, status.Errorf(codes.Internal, "get reset agent: %v", err)
 	}
 
 	return agent, nil
@@ -874,7 +790,7 @@ func (server *Server) resolve_registered_agent(ctx context.Context) (agent_servi
 		return agent_service.Agent{}, status.Error(codes.Unauthenticated, err.Error())
 	}
 
-	registered_agent, err := server.agent_service.GetAgent(agent_id)
+	registered_agent, err := server.agentService.GetAgent(agent_id)
 	if err != nil {
 		if errors.Is(err, agent_service.ErrAgentNotFound) {
 			return agent_service.Agent{}, status.Errorf(codes.Unauthenticated, "agent %s is not registered", agent_id)
@@ -936,7 +852,7 @@ func (server *Server) load_validated_shard(
 	return shard, nil
 }
 
-func (server *Server) validate_shard_report(
+func (server *Server) validateShardReport(
 	ctx context.Context,
 	shard_id uuid.UUID, current_agent_id string, current_tenant_id uuid.UUID, current_backend_name, required_status, action string,
 ) error {
@@ -951,7 +867,7 @@ func (server *Server) validate_shard_report(
 	return nil
 }
 
-func (server *Server) validate_shard_result_data_report(
+func (server *Server) validateShardResultDataReport(
 	ctx context.Context,
 	shard_id uuid.UUID,
 	current_agent_id string,
@@ -1022,83 +938,6 @@ func (server *Server) sendShardResultStored(
 			ShardResultStored: &controlv1.ShardResultStored{ShardId: shardID},
 		},
 	})
-}
-
-func (server *Server) NotifyCancelShard(ctx context.Context, agentID string, shardID uuid.UUID) error {
-	value, ok := server.streams.Load(agentID)
-	if !ok {
-		return nil // agent not connected, skip
-	}
-
-	stream, ok := value.(*agentStream)
-	if !ok || stream == nil {
-		server.streams.Delete(agentID)
-		return nil
-	}
-	if err := stream.SendWithContext(ctx, &controlv1.ServerMessage{
-		Payload: &controlv1.ServerMessage_CancelShard{
-			CancelShard: &controlv1.CancelShard{
-				ShardId: shardID.String(),
-			},
-		},
-	}); err != nil {
-		if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
-			server.streams.Delete(agentID)
-		}
-		server.logger.Error("send cancel shard to agent failed",
-			zap.String("agent_id", agentID),
-			zap.Stringer("shard_id", shardID),
-			zap.Error(err),
-		)
-		return err
-	}
-
-	server.logger.Info("cancel shard sent to agent",
-		zap.String("agent_id", agentID),
-		zap.Stringer("shard_id", shardID),
-	)
-	return nil
-}
-
-// RollbackStaleShards periodically rolls back LEASED/RUNNING shards whose assigned
-// agent has no active gRPC stream back to QUEUED.
-func (server *Server) RollbackStaleShards(ctx context.Context, interval, staleThreshold time.Duration) {
-	if interval <= 0 || staleThreshold <= 0 {
-		server.logger.Error("stale shard reaper disabled: invalid timing configuration",
-			zap.Duration("interval", interval),
-			zap.Duration("stale_threshold", staleThreshold),
-		)
-		return
-	}
-
-	server.logger.Info("stale shard reaper started",
-		zap.Duration("interval", interval),
-		zap.Duration("stale_threshold", staleThreshold),
-	)
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			server.logger.Info("stale shard reaper stopped")
-			return
-		case <-ticker.C:
-			activeAgentIDs := server.collectActiveAgentIDs()
-			if server.db == nil {
-				continue
-			}
-			threshold := time.Now().UTC().Add(-staleThreshold)
-			rolled, err := task_shard_orm.RollbackStaleShards(ctx, server.db, activeAgentIDs, threshold)
-			if err != nil && ctx.Err() == nil {
-				server.logger.Error("rollback stale shards failed", zap.Error(err))
-			}
-			if rolled > 0 {
-				server.logger.Info("reaped stale shards", zap.Int("count", rolled))
-			}
-		}
-	}
 }
 
 func (server *Server) collectActiveAgentIDs() []string {

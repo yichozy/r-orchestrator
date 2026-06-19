@@ -103,7 +103,7 @@ func recordCompletionHookResult(ctx context.Context, taskID uuid.UUID, dispatchE
 		updates["hook_delivered_at"] = nil
 		updates["hook_last_error"] = dispatchErr.Error()
 	} else {
-		deliveredAt := time.Now().UTC()
+		deliveredAt := time.Now()
 		updates["hook_delivered_at"] = deliveredAt
 		updates["hook_last_error"] = ""
 	}
@@ -136,6 +136,5 @@ func cloneTimePtr(value *time.Time) *time.Time {
 		return nil
 	}
 
-	cloned := value.UTC()
-	return &cloned
+	return value
 }

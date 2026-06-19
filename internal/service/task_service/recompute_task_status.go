@@ -55,7 +55,7 @@ func RecomputeTaskStatus(ctx context.Context, db *gorm.DB, taskID uuid.UUID, las
 		return nil, fmt.Errorf("count failed shards: %w", err)
 	}
 
-	finishedAt := time.Now().UTC()
+	finishedAt := time.Now()
 	updates := map[string]any{
 		"finished_at": finishedAt,
 	}

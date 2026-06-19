@@ -61,29 +61,26 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.database.existingSecret.name | default "postgres" }}
                   key: {{ .Values.database.existingSecret.passwordKey | default "R_ORCHESTRATOR_POSTGRES_PASSWORD" }}
-            # --- Agent Auth ---
-            - name: AGENT_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "r-orchestrator.fullname" . }}
-                  key: AGENT_TOKEN
-            # --- K8s Provisioning ---
-            - name: AGENT_NAMESPACE
-              value: {{ .Values.k8s.namespace | quote }}
-            - name: AGENT_IMAGE
-              value: "{{ .Values.image.agent.repository }}:{{ .Values.image.agent.tag }}"
-            - name: IMAGE_PULL_SECRET
-              value: {{ .Values.image.pullSecrets | toJson | quote }}
-            - name: KUBECONFIG_PATH
-              value: {{ .Values.k8s.kubeConfigPath | quote }}
-            - name: AGENT_LOG_LEVEL
-              value: {{ .Values.k8s.agentLogLevel | quote }}
-            - name: AGENT_PARALLELISM
-              value: {{ .Values.k8s.agentParallelism | quote }}
+            # --- Cluster ---
+            - name: CLUSTER_AGENT_TOKEN
+              value: {{ .Values.cluster.agentToken | default (randAlphaNum 16) | quote }}
+            - name: CLUSTER_AGENT_IMAGE
+              value: {{ .Values.cluster.agentImage | default (printf "%s:%s" .Values.image.agent.repository .Values.image.agent.tag) | quote }}
+            - name: CLUSTER_AGENT_LOG_LEVEL
+              value: {{ .Values.cluster.agentLogLevel | quote }}
+            - name: CLUSTER_AGENT_PARALLELISM
+              value: {{ .Values.cluster.agentParallelism | quote }}
             - name: CLUSTER_BILLING_CYCLE_SECONDS
-              value: {{ .Values.k8s.billingCycleSeconds | quote }}
+              value: {{ .Values.cluster.billingCycleSeconds | quote }}
             - name: CLUSTER_BILLING_ADVANCE_SECONDS
-              value: {{ .Values.k8s.billingAdvanceSeconds | quote }}
+              value: {{ .Values.cluster.billingAdvanceSeconds | quote }}
+            # --- Cluster.Kubernetes ---
+            - name: CLUSTER_KUBERNETES_NAMESPACE
+              value: {{ .Values.cluster.kubernetes.namespace | quote }}
+            - name: CLUSTER_KUBERNETES_IMAGE_PULL_SECRETS
+              value: {{ .Values.cluster.kubernetes.imagePullSecrets | toJson | quote }}
+            - name: CLUSTER_KUBERNETES_KUBECONFIG_PATH
+              value: {{ .Values.cluster.kubernetes.kubeConfigPath | quote }}
           ports:
             - name: http
               containerPort: {{ .Values.service.httpPort }}

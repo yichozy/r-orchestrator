@@ -2,6 +2,7 @@ package task_service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -9,6 +10,7 @@ import (
 	"github.com/yichozy/r-orchestrator/internal/orm"
 	"github.com/yichozy/r-orchestrator/internal/orm/task_orm"
 	"github.com/yichozy/r-orchestrator/internal/orm/task_shard_orm"
+	"github.com/yichozy/r-orchestrator/internal/orm/tenant_orm"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -23,9 +25,9 @@ func CancelTask(ctx context.Context, tenantName string, taskID uuid.UUID) error 
 		return err
 	}
 
-	tenant, err := resolveTenantByName(ctx, db, tenantName)
+	tenant, err := tenant_orm.GetByName(ctx, db, tenantName)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %s", ErrTenantNotFound, tenantName)
 	}
 
 	task, err := task_orm.GetByID(ctx, db, taskID)

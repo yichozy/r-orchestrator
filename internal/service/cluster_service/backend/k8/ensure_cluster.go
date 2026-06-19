@@ -12,8 +12,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-// EnsureCluster 确保指定租户的集群存在，若不存在则创建
-func (p *K8sProvider) EnsureCluster(ctx context.Context, tenant model.Tenant) error {
+// ProvisionCluster 确保指定租户的 K8s 资源存在，若不存在则创建
+func (p *K8sProvider) ProvisionCluster(ctx context.Context, tenant model.Tenant) error {
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: p.cfg.Namespace,

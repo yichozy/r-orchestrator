@@ -10,7 +10,7 @@ import (
 
 // Provider 定义集群资源提供者的接口。
 type Provider interface {
-	EnsureCluster(ctx context.Context, tenant model.Tenant) error
+	ProvisionCluster(ctx context.Context, tenant model.Tenant) error
 	ScaleCluster(ctx context.Context, tenant model.Tenant, replicas int) error
 	DestroyCluster(ctx context.Context, tenant model.Tenant) error
 }

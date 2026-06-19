@@ -12,6 +12,7 @@ import (
 	"github.com/yichozy/r-orchestrator/internal/orm/artifact_orm"
 	"github.com/yichozy/r-orchestrator/internal/orm/task_orm"
 	"github.com/yichozy/r-orchestrator/internal/orm/task_shard_orm"
+	"github.com/yichozy/r-orchestrator/internal/orm/tenant_orm"
 	"github.com/yichozy/r-orchestrator/internal/util"
 	"gorm.io/gorm"
 )
@@ -22,14 +23,26 @@ func SubmitTask(ctx context.Context, params SubmitTaskParams) (uuid.UUID, error)
 		return uuid.Nil, err
 	}
 
-	completionHookURL, err := normalizeCompletionHookURL(params.CompletionHookURL)
-	if err != nil {
-		return uuid.Nil, err
+	hook := strings.TrimSpace(params.CompletionHookURL)
+	if hook != "" {
+		parsed, err := url.Parse(hook)
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("invalid completion hook url: %w", err)
+		}
+		if !parsed.IsAbs() || parsed.Host == "" {
+			return uuid.Nil, fmt.Errorf("invalid completion hook url: must be an absolute http(s) url")
+		}
+		if parsed.Scheme != "http" && parsed.Scheme != "https" {
+			return uuid.Nil, fmt.Errorf("invalid completion hook url: unsupported scheme %q", parsed.Scheme)
+		}
+		params.CompletionHookURL = parsed.String()
+	} else {
+		params.CompletionHookURL = ""
 	}
 
-	tenant, err := resolveTenantByName(ctx, db, params.TenantName)
+	tenant, err := tenant_orm.GetByName(ctx, db, params.TenantName)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, fmt.Errorf("%w: %s", ErrTenantNotFound, params.TenantName)
 	}
 
 	shard_csv_rows, err := util.SplitCSVRows(params.CSVBytes, tenant.MaxAgents)
@@ -56,7 +69,7 @@ func SubmitTask(ctx context.Context, params SubmitTaskParams) (uuid.UUID, error)
 		Status:             model.TaskStatusPending,
 		BundleArtifactID:   bundle_artifact_id,
 		InputCSVArtifactID: input_csv_artifact_id,
-		CompletionHookURL:  completionHookURL,
+		CompletionHookURL:  params.CompletionHookURL,
 		ShardCount:         len(shard_csv_rows),
 	}
 	bundle_artifact := model.Artifact{
@@ -106,24 +119,4 @@ func SubmitTask(ctx context.Context, params SubmitTaskParams) (uuid.UUID, error)
 	}
 
 	return task_id, nil
-}
-
-func normalizeCompletionHookURL(raw string) (string, error) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return "", nil
-	}
-
-	parsed, err := url.Parse(trimmed)
-	if err != nil {
-		return "", fmt.Errorf("invalid completion hook url: %w", err)
-	}
-	if !parsed.IsAbs() || parsed.Host == "" {
-		return "", fmt.Errorf("invalid completion hook url: must be an absolute http(s) url")
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return "", fmt.Errorf("invalid completion hook url: unsupported scheme %q", parsed.Scheme)
-	}
-
-	return parsed.String(), nil
 }

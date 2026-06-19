@@ -17,7 +17,7 @@ var (
 type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
-	K8s      K8sConfig
+	Cluster  ClusterConfig
 }
 
 type ServerConfig struct {
@@ -37,16 +37,20 @@ type DatabaseConfig struct {
 	URL      string
 }
 
-type K8sConfig struct {
-	AgentToken          string
-	Namespace           string
-	AgentImage          string
-	ImagePullSecrets    []string
-	KubeConfigPath      string
-	AgentLogLevel       string
-	AgentParallelism    string
-	BillingCycleSeconds int
+type ClusterConfig struct {
+	BillingCycleSeconds  int
 	BillingAdvanceSeconds int
+	AgentToken           string
+	AgentImage           string
+	AgentLogLevel        string
+	AgentParallelism     string
+	Kubernetes           KubernetesBackendConfig
+}
+
+type KubernetesBackendConfig struct {
+	Namespace        string
+	ImagePullSecrets []string
+	KubeConfigPath   string
 }
 
 func LoadFromEnv() (Config, error) {
@@ -79,9 +83,18 @@ func LoadFromEnv() (Config, error) {
 		Path:   dbName,
 	}).String()
 
-	agentToken := os.Getenv("AGENT_TOKEN")
+	agentToken := os.Getenv("CLUSTER_AGENT_TOKEN")
 	if agentToken == "" {
-		return Config{}, fmt.Errorf("AGENT_TOKEN is required")
+		return Config{}, fmt.Errorf("CLUSTER_AGENT_TOKEN is required")
+	}
+
+	billingCycleSeconds := envOrInt("CLUSTER_BILLING_CYCLE_SECONDS", 3600)
+	if billingCycleSeconds <= 0 {
+		billingCycleSeconds = 3600
+	}
+	billingAdvanceSeconds := envOrInt("CLUSTER_BILLING_ADVANCE_SECONDS", 180)
+	if billingAdvanceSeconds <= 0 {
+		billingAdvanceSeconds = 180
 	}
 
 	cfg := Config{
@@ -100,16 +113,18 @@ func LoadFromEnv() (Config, error) {
 			Password: dbPass,
 			URL:      dbURL,
 		},
-		K8s: K8sConfig{
-			AgentToken:          agentToken,
-			Namespace:           envOr("AGENT_NAMESPACE", "r-agents"),
-			AgentImage:          envOr("AGENT_IMAGE", "r-orchestrator/agent:latest"),
-			ImagePullSecrets:    parseImagePullSecrets(os.Getenv("IMAGE_PULL_SECRET")),
-			KubeConfigPath:      os.Getenv("KUBECONFIG_PATH"),
-			AgentLogLevel:       envOr("AGENT_LOG_LEVEL", "info"),
-			AgentParallelism:    envOr("AGENT_PARALLELISM", "1"),
-			BillingCycleSeconds:   envOrInt("CLUSTER_BILLING_CYCLE_SECONDS", 3600),
-			BillingAdvanceSeconds: envOrInt("CLUSTER_BILLING_ADVANCE_SECONDS", 180),
+		Cluster: ClusterConfig{
+			BillingCycleSeconds:   billingCycleSeconds,
+			BillingAdvanceSeconds: billingAdvanceSeconds,
+			AgentToken:            agentToken,
+			AgentImage:            envOr("CLUSTER_AGENT_IMAGE", "r-orchestrator/agent:latest"),
+			AgentLogLevel:         envOr("CLUSTER_AGENT_LOG_LEVEL", "info"),
+			AgentParallelism:      envOr("CLUSTER_AGENT_PARALLELISM", "1"),
+			Kubernetes: KubernetesBackendConfig{
+				Namespace:        envOr("CLUSTER_KUBERNETES_NAMESPACE", "r-agents"),
+				ImagePullSecrets: parseImagePullSecrets(os.Getenv("CLUSTER_KUBERNETES_IMAGE_PULL_SECRETS")),
+				KubeConfigPath:   os.Getenv("CLUSTER_KUBERNETES_KUBECONFIG_PATH"),
+			},
 		},
 	}
 	return cfg, nil

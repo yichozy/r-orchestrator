@@ -12,8 +12,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// ReapExpiringClusters 定期扫描 ACTIVE cluster，临近计费边界时决策续费或销毁。
-func ReapExpiringClusters(
+// RecycleClusters 定期扫描 ACTIVE cluster，空闲时销毁回收，临近计费边界时续费。
+func RecycleClusters(
 	ctx context.Context,
 	db *gorm.DB,
 	provider backend.Provider,
@@ -22,13 +22,13 @@ func ReapExpiringClusters(
 	billingAdvanceSeconds int,
 ) {
 	if interval <= 0 {
-		panic("reaper interval must be positive")
+		panic("recycler interval must be positive")
 	}
 
-	logger := zap.L().Named("cluster-reaper")
+	logger := zap.L().Named("cluster-recycler")
 	threshold := time.Duration(billingAdvanceSeconds) * time.Second
 
-	logger.Info("cluster reaper started",
+	logger.Info("cluster recycler started",
 		zap.Duration("interval", interval),
 		zap.Duration("threshold", threshold),
 	)
@@ -39,7 +39,7 @@ func ReapExpiringClusters(
 	for {
 		select {
 		case <-ctx.Done():
-			logger.Info("cluster reaper stopped")
+			logger.Info("cluster recycler stopped")
 			return
 		case <-ticker.C:
 			processExpiringClusters(ctx, db, provider, agentSvc, threshold)
@@ -56,7 +56,7 @@ func processExpiringClusters(
 ) {
 	clusters, err := cluster_orm.GetActiveClusterList(ctx, db)
 	if err != nil {
-		zap.L().Named("cluster-reaper").Error("list active clusters failed", zap.Error(err))
+		zap.L().Named("cluster-recycler").Error("list active clusters failed", zap.Error(err))
 		return
 	}
 
@@ -76,7 +76,7 @@ func evaluateCluster(
 	cluster model.Cluster,
 	threshold time.Duration,
 ) {
-	logger := zap.L().Named("cluster-reaper").With(zap.Stringer("cluster_id", cluster.ID))
+	logger := zap.L().Named("cluster-recycler").With(zap.Stringer("cluster_id", cluster.ID))
 
 	// PROVISIONING cluster 尚未完成部署，跳过 idle 检查。
 	if cluster.Status != string(model.ClusterStatusActive) {
@@ -127,7 +127,7 @@ func terminateClusterAndResource(
 	logger.Info("terminating idle cluster")
 
 	// 先销毁 K8s 资源，成功后再更新 DB 状态。
-	// 如果 K8s 销毁失败，DB 保留 ACTIVE，下次 reaper 会重试。
+	// 如果 K8s 销毁失败，DB 保留 ACTIVE，下次 recycler 会重试。
 	tenant := model.Tenant{BaseUUIDModel: model.BaseUUIDModel{ID: cluster.TenantID}}
 	if err := provider.DestroyCluster(ctx, tenant); err != nil {
 		logger.Error("destroy cluster resource failed", zap.Error(err))
@@ -135,7 +135,7 @@ func terminateClusterAndResource(
 	}
 
 	if err := TerminateCluster(ctx, db, cluster.ID); err != nil {
-		// K8s 已销毁但 DB 更新失败。DestroyCluster 是幂等的，下次 reaper 会重试销毁。
+		// K8s 已销毁但 DB 更新失败。DestroyCluster 是幂等的，下次 recycler 会重试销毁。
 		logger.Error("terminate cluster record failed after resource destroy, will retry", zap.Error(err))
 		return
 	}

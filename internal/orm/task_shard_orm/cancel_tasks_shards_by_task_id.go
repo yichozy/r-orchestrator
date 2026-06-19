@@ -11,7 +11,7 @@ import (
 )
 
 func CancelTaskShardsByTaskId(ctx context.Context, db *gorm.DB, task_id uuid.UUID) error {
-	now := time.Now().UTC()
+	now := time.Now()
 	result := db.WithContext(ctx).
 		Model(&model.TaskShard{}).
 		Where("task_id = ?", task_id).

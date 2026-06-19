@@ -10,6 +10,7 @@ import (
 	"github.com/yichozy/r-orchestrator/internal/orm"
 	"github.com/yichozy/r-orchestrator/internal/orm/artifact_orm"
 	"github.com/yichozy/r-orchestrator/internal/orm/task_orm"
+	"github.com/yichozy/r-orchestrator/internal/orm/tenant_orm"
 	"gorm.io/gorm"
 )
 
@@ -19,9 +20,9 @@ func GetTaskResultCSV(ctx context.Context, tenantName string, taskID uuid.UUID) 
 		return TaskResultCSVView{}, err
 	}
 
-	tenant, err := resolveTenantByName(ctx, db, tenantName)
+	tenant, err := tenant_orm.GetByName(ctx, db, tenantName)
 	if err != nil {
-		return TaskResultCSVView{}, err
+		return TaskResultCSVView{}, fmt.Errorf("%w: %s", ErrTenantNotFound, tenantName)
 	}
 
 	task, err := task_orm.GetByID(ctx, db, taskID)

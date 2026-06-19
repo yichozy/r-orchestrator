@@ -576,7 +576,7 @@ func markTaskSucceededWithResult(t *testing.T, ctx context.Context, tenantID uui
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	finishedAt := time.Now().UTC()
+	finishedAt := time.Now()
 	if err := testDB.WithContext(ctx).
 		Model(&model.Task{}).
 		Where("id = ?", taskID).

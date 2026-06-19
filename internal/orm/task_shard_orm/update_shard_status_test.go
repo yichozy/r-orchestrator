@@ -22,7 +22,7 @@ func TestUpdateShardStatusAllowsResultReadyTransition(t *testing.T) {
 	mustCreateTask(t, ctx, db, taskID, model.TaskStatusRunning)
 	mustCreateTaskShardWithID(t, ctx, db, shardID, taskID, 0, model.ShardStatusRunning)
 
-	now := time.Now().UTC()
+	now := time.Now()
 	err := UpdateShardStatus(ctx, db, UpdateShardStatusParams{
 		ShardID:         shardID,
 		Status:          model.ShardStatusResultReady,
@@ -67,7 +67,7 @@ func TestUpdateShardStatusAllowsTerminalTransitionDuringMigration(t *testing.T) 
 			mustCreateTask(t, ctx, db, taskID, model.TaskStatusRunning)
 			mustCreateTaskShardWithID(t, ctx, db, shardID, taskID, 0, tt.initialStatus)
 
-			now := time.Now().UTC()
+			now := time.Now()
 			err := UpdateShardStatus(ctx, db, UpdateShardStatusParams{
 				ShardID:    shardID,
 				Status:     model.ShardStatusSucceeded,
@@ -88,7 +88,7 @@ func TestUpdateShardStatusAllowsTerminalTransitionDuringMigration(t *testing.T) 
 	}
 }
 
-func TestRollbackStaleShardsClearsExecutionTimestampsForResultReadyShard(t *testing.T) {
+func TestResetTimedOutShardsClearsExecutionTimestampsForResultReadyShard(t *testing.T) {
 	ctx := context.Background()
 	db := newTestDB(t)
 	taskID := uuid.Must(uuid.NewV7())
@@ -97,8 +97,8 @@ func TestRollbackStaleShardsClearsExecutionTimestampsForResultReadyShard(t *test
 	mustCreateTask(t, ctx, db, taskID, model.TaskStatusRunning)
 	mustCreateTaskShardWithID(t, ctx, db, shardID, taskID, 0, model.ShardStatusResultReady)
 
-	startedAt := time.Now().UTC().Add(-10 * time.Minute)
-	finishedAt := time.Now().UTC().Add(-5 * time.Minute)
+	startedAt := time.Now().Add(-10 * time.Minute)
+	finishedAt := time.Now().Add(-5 * time.Minute)
 	if err := db.WithContext(ctx).Model(&model.TaskShard{}).
 		Where("id = ?", shardID).
 		Updates(map[string]any{
@@ -106,17 +106,17 @@ func TestRollbackStaleShardsClearsExecutionTimestampsForResultReadyShard(t *test
 			"started_at":        startedAt,
 			"finished_at":       finishedAt,
 			"last_error":        "stale result",
-			"updated_at":        time.Now().UTC().Add(-2 * time.Hour),
+			"updated_at":        time.Now().Add(-2 * time.Hour),
 		}).Error; err != nil {
 		t.Fatalf("prime stale result-ready shard: %v", err)
 	}
 
-	rolled, err := RollbackStaleShards(ctx, db, nil, time.Now().UTC().Add(-30*time.Minute))
+	rolled, err := ResetTimedOutShards(ctx, db, nil, time.Now().Add(-30*time.Minute))
 	if err != nil {
-		t.Fatalf("RollbackStaleShards() error = %v", err)
+		t.Fatalf("ResetTimedOutShards() error = %v", err)
 	}
 	if rolled != 1 {
-		t.Fatalf("RollbackStaleShards() rolled = %d, want 1", rolled)
+		t.Fatalf("ResetTimedOutShards() rolled = %d, want 1", rolled)
 	}
 
 	shard, err := GetByID(ctx, db, shardID)

@@ -19,7 +19,7 @@ func CancelTaskById(ctx context.Context, db *gorm.DB, tenant_id uuid.UUID, task_
 		Where("status NOT IN ?", terminal_statuses).
 		Updates(map[string]any{
 			"status":             model.TaskStatusCancelled,
-			"finished_at":        time.Now().UTC(),
+			"finished_at":        time.Now(),
 			"result_artifact_id": nil,
 			"last_error":         "",
 		})

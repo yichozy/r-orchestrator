@@ -2,7 +2,6 @@ package cluster_service
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,23 +9,6 @@ import (
 	"github.com/yichozy/r-orchestrator/internal/orm/cluster_orm"
 	"gorm.io/gorm"
 )
-
-// EnsureCluster 确保 tenant 对应的 cluster 存在且可用。
-// 如果不存在或已 TERMINATED 则创建新的 PROVISIONING 记录；
-// 如果已存在且非 TERMINATED 则直接返回（幂等）。
-func EnsureCluster(ctx context.Context, db *gorm.DB, tenantID uuid.UUID, providerKind string, billingCycleSeconds int) (model.Cluster, error) {
-	existing, err := cluster_orm.GetByTenant(ctx, db, tenantID)
-	if err == nil {
-		return existing, nil
-	}
-
-	cluster, err := cluster_orm.Create(ctx, db, tenantID, providerKind, billingCycleSeconds)
-	if err != nil {
-		return model.Cluster{}, fmt.Errorf("create cluster: %w", err)
-	}
-
-	return cluster, nil
-}
 
 // MarkActive 将 cluster 状态更新为 ACTIVE。
 func MarkActive(ctx context.Context, db *gorm.DB, clusterID uuid.UUID) error {
