@@ -163,9 +163,17 @@ func parseImagePullSecrets(raw string) []string {
 	if raw == "" {
 		return nil
 	}
-	var secrets []string
-	if err := json.Unmarshal([]byte(raw), &secrets); err != nil {
+	var items []struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal([]byte(raw), &items); err != nil {
 		return nil
+	}
+	secrets := make([]string, 0, len(items))
+	for _, item := range items {
+		if item.Name != "" {
+			secrets = append(secrets, item.Name)
+		}
 	}
 	return secrets
 }
