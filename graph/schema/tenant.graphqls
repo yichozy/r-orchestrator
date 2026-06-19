@@ -1,0 +1,18 @@
+scalar Upload
+
+input CreateTenantInput {
+  name: String!
+  primary_backend_name: String!
+  max_agents: Int!
+}
+
+type Tenant {
+  id: UUID!
+  name: String!
+  primary_backend_name: String!
+  max_agents: Int!
+}
+
+extend type Mutation {
+  CreateTenant(input: CreateTenantInput!): Tenant!
+}

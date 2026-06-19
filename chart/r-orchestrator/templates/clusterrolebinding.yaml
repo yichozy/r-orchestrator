@@ -1,0 +1,16 @@
+{{- if .Values.k8s.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "r-orchestrator.fullname" . }}
+  labels:
+    {{- include "r-orchestrator.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "r-orchestrator.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "r-orchestrator.fullname" . }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

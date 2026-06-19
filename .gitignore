@@ -1,0 +1,12 @@
+bin/
+dist/
+.DS_Store
+.env
+.env.*
+coverage.out
+*.log
+vendor/
+target/
+agent/target/
+/server
+*.values.yaml

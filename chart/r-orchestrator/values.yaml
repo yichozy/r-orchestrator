@@ -1,0 +1,46 @@
+replicaCount: 1
+
+image:
+  orchestrator:
+    repository: registry-vpc.ap-southeast-1.aliyuncs.com/knewta/r-orchestrator
+    tag: 0.1.0
+    pullPolicy: IfNotPresent
+  agent:
+    repository: registry-vpc.ap-southeast-1.aliyuncs.com/knewta/r-agent
+    tag: 0.1.0
+    pullPolicy: IfNotPresent
+  pullSecrets: []
+  #  - name: aliyun-registry
+
+service:
+  type: ClusterIP
+  httpPort: 8089
+  grpcPort: 9090
+
+server:
+  httpAddr: ":8089"
+  grpcAddr: ":9090"
+  grpcPublicAddr: ""
+  publicURL: ""
+  logLevel: "info"
+
+database:
+  existingSecret:
+    name: postgres
+    hostKey: R_ORCHESTRATOR_POSTGRES_HOST
+    portKey: R_ORCHESTRATOR_POSTGRES_PORT
+    dbKey: R_ORCHESTRATOR_POSTGRES_DB
+    usernameKey: R_ORCHESTRATOR_POSTGRES_USERNAME
+    passwordKey: R_ORCHESTRATOR_POSTGRES_PASSWORD
+
+secret:
+  agentToken: ""
+
+k8s:
+  enabled: true
+  namespace: r-agents
+  kubeConfigPath: ""
+  agentLogLevel: "info"
+  agentParallelism: "1"
+  billingCycleSeconds: 3600
+  billingAdvanceSeconds: 180

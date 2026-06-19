@@ -1,0 +1,27 @@
+ARG BUILDER_IMAGE=rust:1.91.1-bookworm
+FROM ${BUILDER_IMAGE} AS builder
+WORKDIR /src
+COPY Cargo.toml Cargo.lock ./
+COPY agent/Cargo.toml agent/Cargo.toml
+COPY agent/build.rs agent/build.rs
+COPY proto/control.proto proto/control.proto
+RUN mkdir -p agent/src && echo "fn main() {}" > agent/src/main.rs
+RUN cargo build -p agent --release --locked
+
+COPY agent/src agent/src
+COPY proto proto
+RUN touch agent/src/main.rs && cargo build -p agent --release --locked
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    bash \
+    r-base \
+    r-cran-optparse \
+    r-cran-foreach \
+    r-cran-doparallel \
+    r-cran-survival \
+    r-cran-rpact \
+  && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /src/target/release/agent /usr/local/bin/r-agent
+ENTRYPOINT ["/usr/local/bin/r-agent"]

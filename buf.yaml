@@ -1,0 +1,8 @@
+version: v1
+name: buf.build/yichozy/r-orchestrator
+breaking:
+  use:
+    - FILE
+lint:
+  use:
+    - DEFAULT

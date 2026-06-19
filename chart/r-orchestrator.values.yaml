@@ -1,0 +1,16 @@
+server:
+  grpcPublicAddr: "r-orchestrator.default.svc.cluster.local:9090"
+  logLevel: "debug"
+
+secret:
+  postgresPassword: "YOUR_DB_PASSWORD"
+  agentToken: "YOUR_AGENT_TOKEN"
+
+k8s:
+  namespace: r-agents
+  kubeConfigPath: ""
+  agentImage: ghcr.io/example/r-agent:0.2.0
+  agentLogLevel: "debug"
+  agentParallelism: "1"
+  billingCycleSeconds: 3600
+  billingAdvanceSeconds: 180

@@ -1,0 +1,47 @@
+scalar UUID
+scalar Time
+
+type Query {
+  GetTaskByID(tenant_name: String!, task_id: UUID!): Task!
+  GetTaskList(tenant_name: String!, status: String): [Task!]!
+  GetTaskResultCSV(tenant_name: String!, task_id: UUID!): TaskResultCSV!
+}
+
+type Mutation {
+  SubmitTask(input: SubmitTaskInput!): SubmitTaskResponse!
+  CancelTask(tenant_name: String!, task_id: UUID!): CancelTaskPayload!
+}
+
+type Task {
+  id: UUID!
+  tenant_name: String!
+  status: String!
+  last_error: String!
+  created_at: Time!
+  started_at: Time
+  finished_at: Time
+  shard_count: Int!
+}
+
+input SubmitTaskInput {
+  tenant_name: String!
+  r_zip_file: Upload!
+  parameters_csv_file: Upload!
+  completion_hook_url: String
+}
+
+type CancelTaskPayload {
+  task_id: UUID!
+  status: String!
+}
+
+type SubmitTaskResponse {
+  task_id: UUID!
+}
+
+type TaskResultCSV {
+  task_id: UUID!
+  filename: String!
+  content_type: String!
+  csv_content: String!
+}
