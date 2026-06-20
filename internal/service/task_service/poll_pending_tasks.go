@@ -96,7 +96,7 @@ func PollPendingTasks(ctx context.Context, registry *backend.Registry) {
 					continue
 				}
 
-				_, err = cluster_orm.GetOrCreateByTenant(ctx, db, model.Cluster{
+				_, err = cluster_orm.GetOrCreateActiveCluster(ctx, db, model.Cluster{
 					TenantID:              tenant.ID,
 					ProviderKind:          tenant.PrimaryBackendName,
 					Status:                string(model.ClusterStatusProvisioning),
