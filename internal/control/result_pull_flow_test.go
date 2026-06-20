@@ -27,7 +27,7 @@ func TestServerFetchesResultAfterShardResultReady(t *testing.T) {
 	mustCreateTask(t, ctx, db, taskID, tenantID, model.TaskStatusRunning)
 	mustCreateTaskShardWithAgent(t, ctx, db, shardID, taskID, 0, model.ShardStatusRunning, "agent-1")
 
-	server := NewServer(db, agent_service.NewService(), "token")
+	server := NewServer(db, "token")
 	stream := newFakeControlStream(
 		registerMsg("agent-1", tenantID),
 		shardResultReadyMsg(shardID, []byte("id,value\n1,a\n")),
@@ -54,8 +54,7 @@ func TestReconnectResultReadyTriggersFetchInsteadOfNewAssignment(t *testing.T) {
 	mustCreateTask(t, ctx, db, taskID, tenantID, model.TaskStatusRunning)
 	mustCreateTaskShardWithAgent(t, ctx, db, shardID, taskID, 0, model.ShardStatusResultReady, "agent-1")
 
-	agentSvc := agent_service.NewService()
-	if err := agentSvc.RegisterAgent(agent_service.RegisterAgentParams{
+	if err := agent_service.RegisterAgent(agent_service.RegisterAgentParams{
 		AgentID:     "agent-1",
 		TenantID:    tenantID,
 		BackendName: "ray",
@@ -63,16 +62,16 @@ func TestReconnectResultReadyTriggersFetchInsteadOfNewAssignment(t *testing.T) {
 		t.Fatalf("RegisterAgent() error = %v", err)
 	}
 	currentShardID := shardID.String()
-	if err := agentSvc.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+	if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
 		AgentID:        "agent-1",
 		Status:         agent_service.AgentStatusResultReady,
 		CurrentShardID: &currentShardID,
 	}); err != nil {
 		t.Fatalf("HeartbeatAgent() error = %v", err)
 	}
-	agentSvc.DisconnectAgent("agent-1")
+	agent_service.DisconnectAgent("agent-1")
 
-	server := NewServer(db, agentSvc, "token")
+	server := NewServer(db, "token")
 	stream := newFakeControlStream(registerMsg("agent-1", tenantID))
 
 	if err := server.OpenControlStream(stream); err != nil {
@@ -95,7 +94,7 @@ func TestRegisterRestoresResultReadyFromDBBeforeAssigningNewShard(t *testing.T) 
 	mustCreateTaskShardWithAgent(t, ctx, db, resultReadyShardID, taskID, 0, model.ShardStatusResultReady, "agent-1")
 	mustCreateTaskShardWithAgent(t, ctx, db, queuedShardID, taskID, 1, model.ShardStatusQueued, "")
 
-	server := NewServer(db, agent_service.NewService(), "token")
+	server := NewServer(db, "token")
 	stream := newFakeControlStream(registerMsg("agent-1", tenantID))
 
 	if err := server.OpenControlStream(stream); err != nil {
@@ -122,8 +121,7 @@ func TestReconnectAfterResultReadyWithoutStoredDataFetchesBeforeAssigningNewShar
 		t.Fatalf("update task shard_count: %v", err)
 	}
 
-	agentSvc := agent_service.NewService()
-	if err := agentSvc.RegisterAgent(agent_service.RegisterAgentParams{
+	if err := agent_service.RegisterAgent(agent_service.RegisterAgentParams{
 		AgentID:     "agent-1",
 		TenantID:    tenantID,
 		BackendName: "ray",
@@ -131,16 +129,16 @@ func TestReconnectAfterResultReadyWithoutStoredDataFetchesBeforeAssigningNewShar
 		t.Fatalf("RegisterAgent() error = %v", err)
 	}
 	currentShardID := resultReadyShardID.String()
-	if err := agentSvc.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+	if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
 		AgentID:        "agent-1",
 		Status:         agent_service.AgentStatusRunning,
 		CurrentShardID: &currentShardID,
 	}); err != nil {
 		t.Fatalf("HeartbeatAgent() error = %v", err)
 	}
-	agentSvc.DisconnectAgent("agent-1")
+	agent_service.DisconnectAgent("agent-1")
 
-	server := NewServer(db, agentSvc, "token")
+	server := NewServer(db, "token")
 	outputCSV := []byte("id,value\n1,a\n")
 
 	firstStream := newFakeControlStream(
@@ -174,7 +172,7 @@ func TestServerAcksDuplicateShardResultDataAfterStoredAckLoss(t *testing.T) {
 	mustCreateTask(t, ctx, db, taskID, tenantID, model.TaskStatusRunning)
 	mustCreateTaskShardWithAgent(t, ctx, db, shardID, taskID, 0, model.ShardStatusRunning, "agent-1")
 
-	server := NewServer(db, agent_service.NewService(), "token")
+	server := NewServer(db, "token")
 	outputCSV := []byte("id,value\n1,a\n")
 	stream := newFakeControlStream(
 		registerMsg("agent-1", tenantID),
@@ -218,8 +216,7 @@ func TestAckLossAcrossReconnectRequiresStoredAckBeforeNewAssignment(t *testing.T
 		t.Fatalf("update task shard_count: %v", err)
 	}
 
-	agentSvc := agent_service.NewService()
-	if err := agentSvc.RegisterAgent(agent_service.RegisterAgentParams{
+	if err := agent_service.RegisterAgent(agent_service.RegisterAgentParams{
 		AgentID:     "agent-1",
 		TenantID:    tenantID,
 		BackendName: "ray",
@@ -227,16 +224,16 @@ func TestAckLossAcrossReconnectRequiresStoredAckBeforeNewAssignment(t *testing.T
 		t.Fatalf("RegisterAgent() error = %v", err)
 	}
 	currentShardID := recoveredShardID.String()
-	if err := agentSvc.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+	if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
 		AgentID:        "agent-1",
 		Status:         agent_service.AgentStatusRunning,
 		CurrentShardID: &currentShardID,
 	}); err != nil {
 		t.Fatalf("HeartbeatAgent() error = %v", err)
 	}
-	agentSvc.DisconnectAgent("agent-1")
+	agent_service.DisconnectAgent("agent-1")
 
-	server := NewServer(db, agentSvc, "token")
+	server := NewServer(db, "token")
 	outputCSV := []byte("id,value\n1,a\n")
 
 	firstStream := newFakeControlStream(
@@ -279,7 +276,7 @@ func TestServerRejectsDeprecatedShardCompletedPath(t *testing.T) {
 	mustCreateTask(t, ctx, db, taskID, tenantID, model.TaskStatusRunning)
 	mustCreateTaskShardWithAgent(t, ctx, db, shardID, taskID, 0, model.ShardStatusRunning, "agent-1")
 
-	server := NewServer(db, agent_service.NewService(), "token")
+	server := NewServer(db, "token")
 	stream := newFakeControlStream(
 		registerMsg("agent-1", tenantID),
 		shardCompletedMsg(shardID, []byte("id,value\n1,a\n")),
@@ -408,6 +405,7 @@ func newResultPullTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("AutoMigrate() error = %v", err)
 	}
 	orm.SetTestDB(db)
+	agent_service.Init()
 
 	sqlDB, err := db.DB()
 	if err != nil {

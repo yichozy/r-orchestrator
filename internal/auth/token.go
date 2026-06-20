@@ -1,4 +1,4 @@
-package control
+package auth
 
 import (
 	"context"
@@ -8,7 +8,10 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-func ValidateMetadataToken(ctx context.Context, want string) error {
+// ValidateToken extracts a bearer token from the gRPC metadata and compares
+// it against the expected value. Supports "Authorization: Bearer <token>",
+// "x-agent-token", and "agent-token" headers.
+func ValidateToken(ctx context.Context, want string) error {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return fmt.Errorf("authorization metadata is required")

@@ -5,55 +5,33 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/yichozy/r-orchestrator/internal/model"
-	"github.com/yichozy/r-orchestrator/internal/orm/task_shard_orm"
 	"github.com/yichozy/r-orchestrator/internal/service/agent_service"
+	"github.com/yichozy/r-orchestrator/internal/service/task_service"
 	controlv1 "github.com/yichozy/r-orchestrator/proto"
 	"go.uber.org/zap"
-	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 // HandleHeartbeat processes a heartbeat message from the agent.
-func (server *Server) HandleHeartbeat(
-	streamRef *agentStream,
-	stream grpc.BidiStreamingServer[controlv1.AgentMessage, controlv1.ServerMessage],
-	heartbeat *controlv1.Heartbeat,
-	current_agent_id string,
-	current_tenant_id uuid.UUID,
-	current_backend_name string,
-) error {
+func (server *Server) HandleHeartbeat(sess *agentSession, heartbeat *controlv1.Heartbeat) error {
 	server.logger.Debug("received heartbeat from agent",
-		zap.String("agent_id", current_agent_id),
+		zap.String("agent_id", sess.agentID),
 		zap.String("status", heartbeat.GetStatus()),
 	)
-	if heartbeat.GetAgentId() != "" && heartbeat.GetAgentId() != current_agent_id {
+	if heartbeat.GetAgentId() != "" && heartbeat.GetAgentId() != sess.agentID {
 		return status.Error(codes.InvalidArgument, "heartbeat agent_id does not match registered agent")
 	}
 	if heartbeat.GetStatus() == "IDLE" {
-		if server.db != nil {
-			activeShards, err := task_shard_orm.GetActiveTaskShardByAgent(stream.Context(), server.db, current_agent_id)
-			if err != nil {
-				return status.Errorf(codes.Internal, "load active shards for agent %s: %v", current_agent_id, err)
-			}
-			for _, shard := range activeShards {
-				server.logger.Warn("rolling back orphaned shard on agent IDLE report",
-					zap.String("agent_id", current_agent_id),
-					zap.Stringer("shard_id", shard.ID),
-					zap.String("shard_status", shard.Status),
-				)
-				if rollbackErr := task_shard_orm.UpdateShardStatus(stream.Context(), server.db, task_shard_orm.UpdateShardStatusParams{
-					ShardID:         shard.ID,
-					Status:          model.ShardStatusQueued,
-					CurrentStatuses: []string{shard.Status},
-					ClearAgent:      true,
-				}); rollbackErr != nil {
-					server.logger.Error("failed to roll back orphaned shard",
-						zap.Stringer("shard_id", shard.ID),
-						zap.Error(rollbackErr),
-					)
-				}
-			}
+		n, err := task_service.RollbackOrphanShardsForAgent(sess.Context(), sess.agentID)
+		if err != nil {
+			return status.Errorf(codes.Internal, "rollback orphan shards for agent %s: %v", sess.agentID, err)
+		}
+		if n > 0 {
+			server.logger.Warn("rolled back orphaned shards on agent IDLE report",
+				zap.String("agent_id", sess.agentID),
+				zap.Int("count", n),
+			)
 		}
 	}
 
@@ -62,8 +40,8 @@ func (server *Server) HandleHeartbeat(
 		shardID = &sid
 	}
 
-	if err := server.agentService.HeartbeatAgent(agent_service.HeartbeatAgentParams{
-		AgentID:        current_agent_id,
+	if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+		AgentID:        sess.agentID,
 		Status:         heartbeat.GetStatus(),
 		CurrentShardID: shardID,
 	}); err != nil {
@@ -73,7 +51,7 @@ func (server *Server) HandleHeartbeat(
 		return status.Errorf(codes.Internal, "heartbeat agent: %v", err)
 	}
 
-	server.agentService.ResetHeartbeatTimer(current_agent_id)
+	agent_service.ResetHeartbeat(sess.agentID)
 
 	switch heartbeat.GetStatus() {
 	case agent_service.AgentStatusResultReady:
@@ -84,35 +62,33 @@ func (server *Server) HandleHeartbeat(
 		if parseErr != nil {
 			return status.Errorf(codes.InvalidArgument, "invalid shard_id in result-ready heartbeat: %v", parseErr)
 		}
-		if server.db != nil {
-			shard, err := server.loadValidatedShard(streamRef.Context(), parsedShardID, current_agent_id, current_tenant_id, current_backend_name)
-			if err != nil {
-				code := status.Code(err)
-				if code == codes.NotFound || code == codes.PermissionDenied {
-					server.logger.Warn("result-ready heartbeat references invalid shard",
-						zap.Stringer("shard_id", parsedShardID),
-						zap.String("code", code.String()),
-						zap.Error(err),
-					)
-				} else {
+		shard, err := task_service.LoadValidatedShard(sess.Context(), parsedShardID, sess.agentID, sess.tenantID, sess.backend)
+		if err != nil {
+			code := status.Code(err)
+			if code == codes.NotFound || code == codes.PermissionDenied {
+				server.logger.Warn("result-ready heartbeat references invalid shard",
+					zap.Stringer("shard_id", parsedShardID),
+					zap.String("code", code.String()),
+					zap.Error(err),
+				)
+			} else {
+				return err
+			}
+		} else {
+			switch shard.Status {
+			case model.ShardStatusResultReady:
+				if err := sess.Send(&controlv1.ServerMessage{Payload: &controlv1.ServerMessage_FetchShardResult{FetchShardResult: &controlv1.FetchShardResult{ShardId: parsedShardID.String()}}}); err != nil {
 					return err
 				}
-			} else {
-				switch shard.Status {
-				case model.ShardStatusResultReady:
-					if err := streamRef.Send(&controlv1.ServerMessage{Payload: &controlv1.ServerMessage_FetchShardResult{FetchShardResult: &controlv1.FetchShardResult{ShardId: *shardID}}}); err != nil {
-						return err
-					}
-				case model.ShardStatusSucceeded:
-					if err := server.completeCurrentWorkAndReassign(streamRef, current_agent_id, current_tenant_id, current_backend_name, *shardID); err != nil {
-						return err
-					}
+			case model.ShardStatusSucceeded:
+				if err := server.completeCurrentWorkAndReassign(sess, parsedShardID.String()); err != nil {
+					return err
 				}
 			}
 		}
 
 	case agent_service.AgentStatusIdle:
-		if err := server.tryAssignShard(streamRef, current_agent_id, current_tenant_id, current_backend_name); err != nil {
+		if err := server.TryAssignShard(sess); err != nil {
 			return err
 		}
 	}

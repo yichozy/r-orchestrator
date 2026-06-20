@@ -62,7 +62,4 @@ func SetNotifyCancelShard(f func(ctx context.Context, agentID string, shardID uu
 	notifyCancelShard = f
 }
 
-// SetHookDispatcher 设置 completion hook 派发回调，测试中可注入 stub。
-func SetHookDispatcher(f func(context.Context, CompletionHookPayload) error) {
-	hookDispatcher = f
-}
+

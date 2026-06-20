@@ -64,7 +64,7 @@ func main() {
 		return
 	}
 
-	agentService := agent_service.NewService()
+	agent_service.Init()
 
 	registry := backend.NewRegistry()
 	k8s_provider, err := k8s_backend.NewK8sProvider(k8s_backend.Config{
@@ -84,7 +84,7 @@ func main() {
 	}
 	registry.Register(string(backend.BackendKindKubernetes), k8s_provider)
 
-	grpc_control_server, grpc_server := NewGRPCServer(db, agentService, cfg.Cluster.AgentToken)
+	grpc_control_server, grpc_server := NewGRPCServer(db, cfg.Cluster.AgentToken)
 	task_service.SetNotifyCancelShard(grpc_control_server.NotifyCancelShard)
 	grpc_listener, err := net.Listen("tcp", cfg.Server.GRPCAddr)
 	if err != nil {
@@ -113,7 +113,7 @@ func main() {
 	server_errs := make(chan error, 2)
 
 	// One-time orphan shard cleanup on startup.
-	if err := grpc_control_server.CleanupOrphanShards(ctx, 10*time.Minute); err != nil {
+	if err := task_service.CleanupOrphanShards(ctx, 10*time.Minute); err != nil {
 		logger.Error("startup orphan shard cleanup failed", zap.Error(err))
 	}
 
@@ -125,7 +125,7 @@ func main() {
 	}()
 	go func() {
 		defer wg.Done()
-		cluster_service.RecycleClusters(ctx, db, k8s_provider, agentService, 30*time.Second, cfg.Cluster.BillingAdvanceSeconds)
+		cluster_service.RecycleClusters(ctx, db, k8s_provider, 30*time.Second, cfg.Cluster.BillingAdvanceSeconds)
 	}()
 	go func() {
 		defer wg.Done()

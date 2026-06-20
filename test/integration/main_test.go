@@ -50,7 +50,7 @@ func TestMain(m *testing.M) {
 	testDB = db
 
 	agentToken = "test-agent-token"
-	agentSvc := agent_service.NewService()
+	agent_service.Init()
 
 	// Start gRPC server on random port
 	lis, err := net.Listen("tcp", ":0")
@@ -60,7 +60,7 @@ func TestMain(m *testing.M) {
 	testGrpcLis = lis
 	testGrpcAddr = lis.Addr().String()
 
-	controlServer := control.NewServer(db, agentSvc, agentToken)
+	controlServer := control.NewServer(db, agentToken)
 	testControlServer = controlServer
 
 	testServer = grpc.NewServer()

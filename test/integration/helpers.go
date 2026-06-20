@@ -140,34 +140,11 @@ func sendRegister(stream controlv1.ControlService_OpenControlStreamClient, agent
 	})
 }
 
-func sendHeartbeat(stream controlv1.ControlService_OpenControlStreamClient, agentID, status, currentShardID string) error {
-	return stream.Send(&controlv1.AgentMessage{
-		Payload: &controlv1.AgentMessage_Heartbeat{
-			Heartbeat: &controlv1.Heartbeat{
-				AgentId:        agentID,
-				Status:         status,
-				CurrentShardId: currentShardID,
-			},
-		},
-	})
-}
-
 func sendShardStarted(stream controlv1.ControlService_OpenControlStreamClient, shardID string) error {
 	return stream.Send(&controlv1.AgentMessage{
 		Payload: &controlv1.AgentMessage_ShardStarted{
 			ShardStarted: &controlv1.ShardStarted{
 				ShardId: shardID,
-			},
-		},
-	})
-}
-
-func sendShardCompleted(stream controlv1.ControlService_OpenControlStreamClient, shardID string, outputCSV []byte) error {
-	return stream.Send(&controlv1.AgentMessage{
-		Payload: &controlv1.AgentMessage_ShardCompleted{
-			ShardCompleted: &controlv1.ShardCompleted{
-				ShardId:   shardID,
-				OutputCsv: outputCSV,
 			},
 		},
 	})

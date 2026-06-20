@@ -49,11 +49,6 @@ func NewK8sProvider(cfg Config) (*K8sProvider, error) {
 	}, nil
 }
 
-// SetClient 覆盖 kubernetes client，用于测试场景
-func (p *K8sProvider) SetClient(client kubernetes.Interface) {
-	p.client = client
-}
-
 // clusterName 根据租户 ID 生成集群名称
 func clusterName(tenantID uuid.UUID) string {
 	return fmt.Sprintf("r-orch-%s-agents", tenantID.String()[:8])

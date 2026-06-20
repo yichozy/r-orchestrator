@@ -8,8 +8,8 @@ import (
 	"gorm.io/gorm"
 )
 
-func NewGRPCServer(db *gorm.DB, agent_service *agent_service.Service, agent_token string) (*control.Server, *grpc.Server) {
-	controlServer := control.NewServer(db, agent_service, agent_token)
+func NewGRPCServer(db *gorm.DB, agent_token string) (*control.Server, *grpc.Server) {
+	controlServer := control.NewServer(db, agent_token)
 	agent_service.SetTimeoutCallback(controlServer.HandleAgentTimeout)
 	server := grpc.NewServer()
 	controlv1.RegisterControlServiceServer(server, controlServer)

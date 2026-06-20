@@ -25,7 +25,7 @@ func IsExpired(cluster model.Cluster) bool {
 // ShouldTerminate 判断 cluster 是否应被销毁：
 //   - 该 tenant 无活跃任务
 //   - 无已连接的 IDLE/RUNNING agent
-func ShouldTerminate(ctx context.Context, db *gorm.DB, agentSvc *agent_service.Service, cluster model.Cluster) (bool, error) {
+func ShouldTerminate(ctx context.Context, db *gorm.DB, cluster model.Cluster) (bool, error) {
 	activeCount, err := task_orm.CountActiveTasks(ctx, db, cluster.TenantID)
 	if err != nil {
 		return false, err
@@ -38,7 +38,7 @@ func ShouldTerminate(ctx context.Context, db *gorm.DB, agentSvc *agent_service.S
 		return false, nil
 	}
 
-	activeTenants := agentSvc.GetActiveTenantIDs()
+	activeTenants := agent_service.GetActiveTenantIDs()
 	if activeTenants[cluster.TenantID] {
 		zap.L().Named("billing").Debug("cluster has connected agents, skip terminate",
 			zap.Stringer("cluster_id", cluster.ID),

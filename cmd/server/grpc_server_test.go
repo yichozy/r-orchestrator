@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/yichozy/r-orchestrator/internal/model"
-	"github.com/yichozy/r-orchestrator/internal/service/agent_service"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -13,7 +12,7 @@ import (
 func TestNewGRPCServerRegistersControlService(t *testing.T) {
 	db := open_test_db(t)
 
-	_, grpcServer := NewGRPCServer(db, agent_service.NewService(), "token-1")
+	_, grpcServer := NewGRPCServer(db, "token-1")
 	service_info := grpcServer.GetServiceInfo()
 	if _, ok := service_info["rorchestrator.control.v1.ControlService"]; !ok {
 		t.Fatalf("control service not registered: %#v", service_info)

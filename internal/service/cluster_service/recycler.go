@@ -6,7 +6,6 @@ import (
 
 	"github.com/yichozy/r-orchestrator/internal/model"
 	"github.com/yichozy/r-orchestrator/internal/orm/cluster_orm"
-	agent_service "github.com/yichozy/r-orchestrator/internal/service/agent_service"
 	"github.com/yichozy/r-orchestrator/internal/service/cluster_service/backend"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -17,7 +16,6 @@ func RecycleClusters(
 	ctx context.Context,
 	db *gorm.DB,
 	provider backend.Provider,
-	agentSvc *agent_service.Service,
 	interval time.Duration,
 	billingAdvanceSeconds int,
 ) {
@@ -42,7 +40,7 @@ func RecycleClusters(
 			logger.Info("cluster recycler stopped")
 			return
 		case <-ticker.C:
-			processExpiringClusters(ctx, db, provider, agentSvc, threshold)
+			processExpiringClusters(ctx, db, provider, threshold)
 		}
 	}
 }
@@ -51,7 +49,6 @@ func processExpiringClusters(
 	ctx context.Context,
 	db *gorm.DB,
 	provider backend.Provider,
-	agentSvc *agent_service.Service,
 	threshold time.Duration,
 ) {
 	clusters, err := cluster_orm.GetActiveClusterList(ctx, db)
@@ -64,7 +61,7 @@ func processExpiringClusters(
 		if ctx.Err() != nil {
 			return
 		}
-		evaluateCluster(ctx, db, provider, agentSvc, cluster, threshold)
+		evaluateCluster(ctx, db, provider, cluster, threshold)
 	}
 }
 
@@ -72,7 +69,6 @@ func evaluateCluster(
 	ctx context.Context,
 	db *gorm.DB,
 	provider backend.Provider,
-	agentSvc *agent_service.Service,
 	cluster model.Cluster,
 	threshold time.Duration,
 ) {
@@ -84,7 +80,7 @@ func evaluateCluster(
 	}
 
 	// 无论是否临近计费边界，空闲 cluster 应立即回收。
-	shouldTerm, err := ShouldTerminate(ctx, db, agentSvc, cluster)
+	shouldTerm, err := ShouldTerminate(ctx, db, cluster)
 	if err != nil {
 		logger.Error("evaluate cluster termination failed", zap.Error(err))
 		return

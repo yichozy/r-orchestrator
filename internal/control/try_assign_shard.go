@@ -13,21 +13,18 @@ import (
 	"gorm.io/gorm"
 )
 
-func (server *Server) tryAssignShard(
-	stream *agentStream,
-	agent_id string, tenant_id uuid.UUID, backend_name string,
-) (ret_err error) {
-	if server.db == nil || agent_id == "" || tenant_id == uuid.Nil || backend_name == "" {
+func (server *Server) TryAssignShard(sess *agentSession) (ret_err error) {
+	if server.db == nil || sess.agentID == "" || sess.tenantID == uuid.Nil || sess.backend == "" {
 		return nil
 	}
 
-	task, shard, err := task_service.LeaseNextShard(stream.Context(), tenant_id, backend_name, agent_id)
+	task, shard, err := task_service.LeaseNextShard(sess.Context(), sess.tenantID, sess.backend, sess.agentID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			server.logger.Debug("no queued shard available for assignment",
-				zap.String("agent_id", agent_id),
-				zap.Stringer("tenant_id", tenant_id),
-				zap.String("backend_name", backend_name),
+				zap.String("agent_id", sess.agentID),
+				zap.Stringer("tenant_id", sess.tenantID),
+				zap.String("backend_name", sess.backend),
 			)
 			return nil
 		}
@@ -38,7 +35,7 @@ func (server *Server) tryAssignShard(
 		if !should_rollback {
 			return
 		}
-		if rollback_err := server.rollbackAssignedShard(stream.Context(), task, shard, agent_id); rollback_err != nil {
+		if rollback_err := server.rollbackAssignedShard(sess.Context(), task, shard, sess.agentID); rollback_err != nil {
 			if ret_err == nil {
 				ret_err = status.Errorf(codes.Internal, "rollback assigned shard: %v", rollback_err)
 				return
@@ -48,15 +45,15 @@ func (server *Server) tryAssignShard(
 	}()
 
 	shardIDStr := shard.ID.String()
-	if err := server.agentService.HeartbeatAgent(agent_service.HeartbeatAgentParams{
-		AgentID:        agent_id,
+	if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+		AgentID:        sess.agentID,
 		Status:         agent_service.AgentStatusRunning,
 		CurrentShardID: &shardIDStr,
 	}); err != nil {
 		return status.Errorf(codes.Internal, "mark agent busy: %v", err)
 	}
 
-	if err := stream.Send(&controlv1.ServerMessage{
+	if err := sess.Send(&controlv1.ServerMessage{
 		Payload: &controlv1.ServerMessage_AssignShard{
 			AssignShard: &controlv1.AssignShard{
 				ShardId:            shard.ID.String(),
@@ -72,7 +69,7 @@ func (server *Server) tryAssignShard(
 	}
 
 	server.logger.Info("shard assigned",
-		zap.String("agent_id", agent_id),
+		zap.String("agent_id", sess.agentID),
 		zap.Stringer("task_id", task.ID),
 		zap.Stringer("shard_id", shard.ID),
 	)

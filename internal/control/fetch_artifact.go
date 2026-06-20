@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/yichozy/r-orchestrator/internal/auth"
 	"github.com/yichozy/r-orchestrator/internal/orm/artifact_orm"
 	"github.com/yichozy/r-orchestrator/internal/service/agent_service"
 	"github.com/yichozy/r-orchestrator/internal/util"
@@ -17,13 +18,10 @@ import (
 )
 
 func (server *Server) FetchArtifact(request *controlv1.FetchArtifactRequest, stream grpc.ServerStreamingServer[controlv1.FetchArtifactChunk]) error {
-	if server.agentService == nil {
-		return status.Error(codes.FailedPrecondition, "agent service is not configured")
-	}
 	if server.db == nil {
 		return status.Error(codes.FailedPrecondition, "db is not configured")
 	}
-	if err := ValidateMetadataToken(stream.Context(), server.expectedToken); err != nil {
+	if err := auth.ValidateToken(stream.Context(), server.expectedToken); err != nil {
 		return status.Error(codes.Unauthenticated, err.Error())
 	}
 	if request.GetArtifactId() == "" {
@@ -48,7 +46,7 @@ func (server *Server) FetchArtifact(request *controlv1.FetchArtifactRequest, str
 		if agentID == "" {
 			return agent_service.Agent{}, fmt.Errorf("agent-id metadata is required")
 		}
-		registered_agent, err := server.agentService.GetAgent(agentID)
+		registered_agent, err := agent_service.GetAgent(agentID)
 		if err != nil {
 			if errors.Is(err, agent_service.ErrAgentNotFound) {
 				return agent_service.Agent{}, status.Errorf(codes.Unauthenticated, "agent %s is not registered", agentID)

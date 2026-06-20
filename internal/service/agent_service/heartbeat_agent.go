@@ -5,11 +5,11 @@ import (
 	"time"
 )
 
-func (service *Service) HeartbeatAgent(params HeartbeatAgentParams) error {
-	service.mu.Lock()
-	defer service.mu.Unlock()
+func HeartbeatAgent(params HeartbeatAgentParams) error {
+	mu.Lock()
+	defer mu.Unlock()
 
-	agent, ok := service.agents[params.AgentID]
+	agent, ok := agents[params.AgentID]
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrAgentNotFound, params.AgentID)
 	}
@@ -18,7 +18,7 @@ func (service *Service) HeartbeatAgent(params HeartbeatAgentParams) error {
 	agent.Status = params.Status
 	agent.CurrentShardID = params.CurrentShardID
 	agent.LastHeartbeatAt = &now
-	service.agents[params.AgentID] = agent
+	agents[params.AgentID] = agent
 
 	return nil
 }

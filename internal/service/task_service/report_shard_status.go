@@ -17,6 +17,15 @@ import (
 
 type StoreShardOutputFunc func(ctx context.Context, tx *gorm.DB, task model.Task, shard model.TaskShard, outputCSV []byte) error
 
+// defaultStoreShardOutputFn is the global override for shard output persistence.
+// Set via SetStoreShardOutputFunc for test use.
+var defaultStoreShardOutputFn StoreShardOutputFunc
+
+// SetStoreShardOutputFunc sets a global override for shard output persistence.
+func SetStoreShardOutputFunc(fn StoreShardOutputFunc) {
+	defaultStoreShardOutputFn = fn
+}
+
 var reportShardStatusAfterTaskLockHook func(tx *gorm.DB, taskID, shardID uuid.UUID)
 
 type ReportShardStatusParams struct {
@@ -145,6 +154,9 @@ func storeShardOutput(
 ) error {
 	if storeFn != nil {
 		return storeFn(ctx, tx, task, shard, outputCSV)
+	}
+	if defaultStoreShardOutputFn != nil {
+		return defaultStoreShardOutputFn(ctx, tx, task, shard, outputCSV)
 	}
 
 	artifactID, err := uuid.NewV7()

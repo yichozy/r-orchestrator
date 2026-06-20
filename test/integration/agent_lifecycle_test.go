@@ -153,19 +153,12 @@ func TestShardCompletedBlockedWhenOutputStorageFails(t *testing.T) {
 	defer cleanupTask(ctx, taskID)
 	agentID := "10000000-0000-0000-0000-000000000099"
 
-	if testControlServer == nil {
-		t.Fatal("test control server is nil")
-	}
-	testControlServer.SetStoreShardOutputFunc(func(ctx context.Context, tx *gorm.DB, tenantID, shardID uuid.UUID, outputCSV []byte) error {
-		var shard model.TaskShard
-		if err := tx.WithContext(ctx).Where("id = ?", shardID).First(&shard).Error; err != nil {
-			return err
-		}
+	task_service.SetStoreShardOutputFunc(func(ctx context.Context, tx *gorm.DB, task model.Task, shard model.TaskShard, outputCSV []byte) error {
 		shardIndex := shard.ShardIndex
 		if err := artifact_orm.Create(ctx, tx, model.Artifact{
 			BaseUUIDModel: model.BaseUUIDModel{ID: uuid.New()},
-			TenantID:      tenantID,
-			TaskID:        shard.TaskID,
+			TenantID:      task.TenantID,
+			TaskID:        task.ID,
 			ArtifactType:  model.ArtifactTypeShardOutput,
 			ContentBytes:  append([]byte(nil), outputCSV...),
 			ContentSize:   int64(len(outputCSV)),
@@ -176,7 +169,7 @@ func TestShardCompletedBlockedWhenOutputStorageFails(t *testing.T) {
 		}
 		return errors.New("disk write failed")
 	})
-	defer testControlServer.SetStoreShardOutputFunc(nil)
+	defer task_service.SetStoreShardOutputFunc(nil)
 
 	conn, err := dialGrpc(ctx)
 	if err != nil {
@@ -832,7 +825,7 @@ func restartIntegrationControlServer(t *testing.T) {
 
 	testGrpcLis = lis
 	testGrpcAddr = lis.Addr().String()
-	testControlServer = control.NewServer(testDB, agent_service.NewService(), agentToken)
+	testControlServer = control.NewServer(testDB, agentToken)
 	testServer = grpc.NewServer()
 	controlv1.RegisterControlServiceServer(testServer, testControlServer)
 
