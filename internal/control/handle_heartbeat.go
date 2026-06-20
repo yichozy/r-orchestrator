@@ -81,9 +81,15 @@ func (server *Server) HandleHeartbeat(sess *agentSession, heartbeat *controlv1.H
 					return err
 				}
 			case model.ShardStatusSucceeded:
-				if err := server.completeCurrentWorkAndReassign(sess, parsedShardID.String()); err != nil {
-					return err
+				// Result already stored (ShardResultData was processed), skip ack to avoid duplicate.
+				if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+					AgentID:        sess.agentID,
+					Status:         agent_service.AgentStatusIdle,
+					CurrentShardID: nil,
+				}); err != nil {
+					return status.Errorf(codes.Internal, "reset agent idle: %v", err)
 				}
+				return server.TryAssignShard(sess)
 			}
 		}
 
