@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"sync"
+	"time"
 )
 
 var (
@@ -38,13 +39,15 @@ type DatabaseConfig struct {
 }
 
 type ClusterConfig struct {
-	BillingCycleSeconds  int
+	BillingCycleSeconds   int
 	BillingAdvanceSeconds int
-	AgentToken           string
-	AgentImage           string
-	AgentLogLevel        string
-	AgentParallelism     string
-	Kubernetes           KubernetesBackendConfig
+	AgentToken            string
+	AgentImage            string
+	AgentLogLevel         string
+	AgentParallelism      string
+	AgentHeartbeatTimeout time.Duration
+	AgentDisconnectGrace  time.Duration
+	Kubernetes            KubernetesBackendConfig
 }
 
 type KubernetesBackendConfig struct {
@@ -120,6 +123,8 @@ func LoadFromEnv() (Config, error) {
 			AgentImage:            envOr("CLUSTER_AGENT_IMAGE", "r-orchestrator/agent:latest"),
 			AgentLogLevel:         envOr("CLUSTER_AGENT_LOG_LEVEL", "info"),
 			AgentParallelism:      envOr("CLUSTER_AGENT_PARALLELISM", "1"),
+				AgentHeartbeatTimeout: envOrDuration("CLUSTER_AGENT_HEARTBEAT_TIMEOUT", 90*time.Second),
+				AgentDisconnectGrace:  envOrDuration("CLUSTER_AGENT_DISCONNECT_GRACE", 5*time.Minute),
 			Kubernetes: KubernetesBackendConfig{
 				Namespace:        envOr("CLUSTER_KUBERNETES_NAMESPACE", "r-agents"),
 				ImagePullSecrets: parseImagePullSecrets(os.Getenv("CLUSTER_KUBERNETES_IMAGE_PULL_SECRETS")),
@@ -191,4 +196,13 @@ func parseImagePullSecrets(raw string) []string {
 		}
 	}
 	return secrets
+}
+
+func envOrDuration(key string, fallback time.Duration) time.Duration {
+	if s := os.Getenv(key); s != "" {
+		if d, err := time.ParseDuration(s); err == nil && d > 0 {
+			return d
+		}
+	}
+	return fallback
 }

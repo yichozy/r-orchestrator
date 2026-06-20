@@ -112,29 +112,30 @@ func main() {
 
 	server_errs := make(chan error, 2)
 
+	// One-time orphan shard cleanup on startup.
+	if err := grpc_control_server.CleanupOrphanShards(ctx, 10*time.Minute); err != nil {
+		logger.Error("startup orphan shard cleanup failed", zap.Error(err))
+	}
+
 	var wg sync.WaitGroup
+	wg.Add(4)
 	go func() {
-		wg.Add(1)
 		defer wg.Done()
 		task_service.PollPendingTasks(ctx, registry)
 	}()
 	go func() {
-		wg.Add(1)
 		defer wg.Done()
 		cluster_service.RecycleClusters(ctx, db, k8s_provider, agentService, 30*time.Second, cfg.Cluster.BillingAdvanceSeconds)
 	}()
 	go func() {
-		wg.Add(1)
 		defer wg.Done()
-		grpc_control_server.ResetTimedOutShards(ctx, 30*time.Second, 90*time.Second)
-	}()
-	go func() {
 		logger.Info("gRPC server listening", zap.String("addr", cfg.Server.GRPCAddr))
 		if err := grpc_server.Serve(grpc_listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			server_errs <- fmt.Errorf("serve control grpc: %w", err)
 		}
 	}()
 	go func() {
+		defer wg.Done()
 		logger.Info("HTTP server listening", zap.String("addr", cfg.Server.HTTPAddr))
 		if err := http_server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			server_errs <- fmt.Errorf("serve http: %w", err)
@@ -149,18 +150,17 @@ func main() {
 	}
 
 	logger.Info("shutting down...")
+	wg.Add(2)
 	shutdown_ctx, shutdown_cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdown_cancel()
 
 	go func() {
-		wg.Add(1)
 		defer wg.Done()
 		if err := http_server.Shutdown(shutdown_ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Warn("shutdown http server error", zap.Error(err))
 		}
 	}()
 	go func() {
-		wg.Add(1)
 		defer wg.Done()
 		grpc_server.GracefulStop()
 	}()

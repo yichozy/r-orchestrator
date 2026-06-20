@@ -31,10 +31,12 @@ func (service *Service) RegisterAgent(params RegisterAgentParams) error {
 		}
 
 		switch existing_agent.Status {
-		case AgentStatusDisconnected:
-			// Recover from disconnection
+		case AgentStatusDisconnected, AgentStatusTimedOut, AgentStatusUnresponsive:
+			// Recover from disconnect/timeout
 			recoveryStatus := existing_agent.PreDisconnectStatus
-			if recoveryStatus == "" || recoveryStatus == AgentStatusDisconnected || recoveryStatus == AgentStatusIdle {
+			if recoveryStatus == "" || recoveryStatus == AgentStatusDisconnected ||
+				recoveryStatus == AgentStatusIdle || recoveryStatus == AgentStatusTimedOut ||
+				recoveryStatus == AgentStatusUnresponsive {
 				recoveryStatus = AgentStatusIdle
 			}
 			registered_agent.Status = recoveryStatus
@@ -47,7 +49,7 @@ func (service *Service) RegisterAgent(params RegisterAgentParams) error {
 		case AgentStatusIdle:
 			return fmt.Errorf("%w: %s is already registered", ErrAgentIdentityConflict, params.AgentID)
 		default:
-			// IDLE or unknown — fresh start
+			// Unknown — fresh start
 		}
 	}
 

@@ -88,58 +88,6 @@ func TestUpdateShardStatusAllowsTerminalTransitionDuringMigration(t *testing.T) 
 	}
 }
 
-func TestResetTimedOutShardsClearsExecutionTimestampsForResultReadyShard(t *testing.T) {
-	ctx := context.Background()
-	db := newTestDB(t)
-	taskID := uuid.Must(uuid.NewV7())
-	shardID := uuid.Must(uuid.NewV7())
-
-	mustCreateTask(t, ctx, db, taskID, model.TaskStatusRunning)
-	mustCreateTaskShardWithID(t, ctx, db, shardID, taskID, 0, model.ShardStatusResultReady)
-
-	startedAt := time.Now().Add(-10 * time.Minute)
-	finishedAt := time.Now().Add(-5 * time.Minute)
-	if err := db.WithContext(ctx).Model(&model.TaskShard{}).
-		Where("id = ?", shardID).
-		Updates(map[string]any{
-			"assigned_agent_id": "agent-1",
-			"started_at":        startedAt,
-			"finished_at":       finishedAt,
-			"last_error":        "stale result",
-			"updated_at":        time.Now().Add(-2 * time.Hour),
-		}).Error; err != nil {
-		t.Fatalf("prime stale result-ready shard: %v", err)
-	}
-
-	rolled, err := ResetTimedOutShards(ctx, db, nil, time.Now().Add(-30*time.Minute))
-	if err != nil {
-		t.Fatalf("ResetTimedOutShards() error = %v", err)
-	}
-	if rolled != 1 {
-		t.Fatalf("ResetTimedOutShards() rolled = %d, want 1", rolled)
-	}
-
-	shard, err := GetByID(ctx, db, shardID)
-	if err != nil {
-		t.Fatalf("GetByID() error = %v", err)
-	}
-	if shard.Status != model.ShardStatusQueued {
-		t.Fatalf("shard status = %s, want %s", shard.Status, model.ShardStatusQueued)
-	}
-	if shard.AssignedAgentID != "" {
-		t.Fatalf("AssignedAgentID = %q, want empty", shard.AssignedAgentID)
-	}
-	if shard.StartedAt != nil {
-		t.Fatalf("StartedAt = %v, want nil", shard.StartedAt)
-	}
-	if shard.FinishedAt != nil {
-		t.Fatalf("FinishedAt = %v, want nil", shard.FinishedAt)
-	}
-	if shard.LastError != "" {
-		t.Fatalf("LastError = %q, want empty", shard.LastError)
-	}
-}
-
 func newTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
