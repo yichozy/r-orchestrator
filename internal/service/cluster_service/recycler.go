@@ -4,31 +4,29 @@ import (
 	"context"
 	"time"
 
+	"github.com/yichozy/r-orchestrator/internal/config"
 	"github.com/yichozy/r-orchestrator/internal/model"
+	"github.com/yichozy/r-orchestrator/internal/orm"
 	"github.com/yichozy/r-orchestrator/internal/orm/cluster_orm"
+	"github.com/yichozy/r-orchestrator/internal/orm/task_orm"
 	"github.com/yichozy/r-orchestrator/internal/service/cluster_service/backend"
 	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
-// RecycleClusters 定期扫描 ACTIVE cluster，空闲时销毁回收，临近计费边界时续费。
-func RecycleClusters(
-	ctx context.Context,
-	db *gorm.DB,
-	provider backend.Provider,
-	interval time.Duration,
-	billingAdvanceSeconds int,
-) {
-	if interval <= 0 {
-		panic("recycler interval must be positive")
-	}
+// RecycleClusters 定期扫描 ACTIVE cluster，管理空闲计时、续费和回收。
+func RecycleClusters(ctx context.Context, registry *backend.Registry) {
+	const interval = 30 * time.Second
+	cfg := config.GlobalConfig.Cluster
+
+	advanceThreshold := time.Duration(cfg.BillingAdvanceSeconds) * time.Second
+	idleThreshold := time.Duration(cfg.IdleThresholdSeconds) * time.Second
 
 	logger := zap.L().Named("cluster-recycler")
-	threshold := time.Duration(billingAdvanceSeconds) * time.Second
 
 	logger.Info("cluster recycler started",
 		zap.Duration("interval", interval),
-		zap.Duration("threshold", threshold),
+		zap.Duration("advance_threshold", advanceThreshold),
+		zap.Duration("idle_threshold", idleThreshold),
 	)
 
 	ticker := time.NewTicker(interval)
@@ -40,101 +38,102 @@ func RecycleClusters(
 			logger.Info("cluster recycler stopped")
 			return
 		case <-ticker.C:
-			processExpiringClusters(ctx, db, provider, threshold)
+			db, err := orm.GetDB()
+			if err != nil {
+				logger.Error("get db failed", zap.Error(err))
+				continue
+			}
+
+			clusters, err := cluster_orm.GetActiveClusterList(ctx, db)
+			if err != nil {
+				logger.Error("list active clusters failed", zap.Error(err))
+				continue
+			}
+
+			for _, cluster := range clusters {
+				if ctx.Err() != nil {
+					return
+				}
+
+				log := logger.With(zap.Stringer("cluster_id", cluster.ID))
+
+				// PROVISIONING cluster 尚未完成部署，跳过。
+				if cluster.Status != string(model.ClusterStatusActive) {
+					continue
+				}
+
+				activeCount, err := task_orm.CountActiveTasks(ctx, db, cluster.TenantID)
+				if err != nil {
+					log.Error("count active tasks failed", zap.Error(err))
+					continue
+				}
+
+				if activeCount > 0 {
+					if cluster.IdleSince != nil {
+						if err := cluster_orm.UpdateIdleSince(ctx, db, cluster.ID, nil); err != nil {
+							log.Error("clear idle_since failed", zap.Error(err))
+						}
+					}
+					if IsExpired(cluster) {
+						log.Info("expired cluster has activity, force renewing")
+						if err := RenewBilling(ctx, db, cluster.ID); err != nil {
+							log.Error("force renew billing failed", zap.Error(err))
+						}
+						continue
+					}
+					if IsNearBoundary(cluster, advanceThreshold) {
+						log.Info("cluster near boundary with activity, renewing billing")
+						if err := RenewBilling(ctx, db, cluster.ID); err != nil {
+							log.Error("renew billing failed", zap.Error(err))
+						}
+					}
+					continue
+				}
+
+				// 无活跃任务
+				if cluster.IdleSince == nil {
+					now := time.Now()
+					if err := cluster_orm.UpdateIdleSince(ctx, db, cluster.ID, &now); err != nil {
+						log.Error("set idle_since failed", zap.Error(err))
+					}
+					cluster.IdleSince = &now
+					log.Info("cluster idle timer started")
+				}
+
+				if IsIdleExpired(cluster, idleThreshold) && (IsNearBoundary(cluster, advanceThreshold) || IsExpired(cluster)) {
+					log.Info("terminating idle cluster")
+					tenant := model.Tenant{BaseUUIDModel: model.BaseUUIDModel{ID: cluster.TenantID}}
+					provider, err := registry.Get(cluster.BackendName)
+					if err != nil {
+						log.Error("get provider failed", zap.Error(err))
+						continue
+					}
+					if err := provider.DestroyCluster(ctx, tenant); err != nil {
+						log.Error("destroy cluster resource failed", zap.Error(err))
+						continue
+					}
+					if err := TerminateCluster(ctx, db, cluster.ID); err != nil {
+						log.Error("terminate cluster record failed after resource destroy, will retry", zap.Error(err))
+						continue
+					}
+					log.Info("cluster terminated successfully")
+					continue
+				}
+
+				if IsExpired(cluster) {
+					log.Info("expired cluster within idle threshold, force renewing")
+					if err := RenewBilling(ctx, db, cluster.ID); err != nil {
+						log.Error("force renew billing failed", zap.Error(err))
+					}
+					continue
+				}
+				if IsNearBoundary(cluster, advanceThreshold) {
+					log.Info("cluster near boundary within idle threshold, renewing billing")
+					if err := RenewBilling(ctx, db, cluster.ID); err != nil {
+						log.Error("renew billing failed", zap.Error(err))
+					}
+				}
+			}
 		}
 	}
-}
-
-func processExpiringClusters(
-	ctx context.Context,
-	db *gorm.DB,
-	provider backend.Provider,
-	threshold time.Duration,
-) {
-	clusters, err := cluster_orm.GetActiveClusterList(ctx, db)
-	if err != nil {
-		zap.L().Named("cluster-recycler").Error("list active clusters failed", zap.Error(err))
-		return
-	}
-
-	for _, cluster := range clusters {
-		if ctx.Err() != nil {
-			return
-		}
-		evaluateCluster(ctx, db, provider, cluster, threshold)
-	}
-}
-
-func evaluateCluster(
-	ctx context.Context,
-	db *gorm.DB,
-	provider backend.Provider,
-	cluster model.Cluster,
-	threshold time.Duration,
-) {
-	logger := zap.L().Named("cluster-recycler").With(zap.Stringer("cluster_id", cluster.ID))
-
-	// PROVISIONING cluster 尚未完成部署，跳过 idle 检查。
-	if cluster.Status != string(model.ClusterStatusActive) {
-		return
-	}
-
-	// 无论是否临近计费边界，空闲 cluster 应立即回收。
-	shouldTerm, err := ShouldTerminate(ctx, db, cluster)
-	if err != nil {
-		logger.Error("evaluate cluster termination failed", zap.Error(err))
-		return
-	}
-	if shouldTerm {
-		terminateClusterAndResource(ctx, db, provider, cluster, logger)
-		return
-	}
-
-	// cluster 有活跃任务或已连接 agent，检查是否需要续费。
-	if IsExpired(cluster) {
-		logger.Info("expired cluster has activity, force renewing")
-		if err := RenewBilling(ctx, db, cluster.ID); err != nil {
-			logger.Error("force renew billing failed", zap.Error(err))
-		}
-		return
-	}
-
-	// 未临近边界，跳过续费评估
-	if !IsNearBoundary(cluster, threshold) {
-		return
-	}
-
-	// 临近边界且有活跃任务，续费
-	logger.Info("cluster near boundary but has activity, renewing billing",
-		zap.Time("next_boundary", cluster.NextBillingBoundaryAt),
-	)
-	if err := RenewBilling(ctx, db, cluster.ID); err != nil {
-		logger.Error("renew billing failed", zap.Error(err))
-	}
-}
-
-func terminateClusterAndResource(
-	ctx context.Context,
-	db *gorm.DB,
-	provider backend.Provider,
-	cluster model.Cluster,
-	logger *zap.Logger,
-) {
-	logger.Info("terminating idle cluster")
-
-	// 先销毁 K8s 资源，成功后再更新 DB 状态。
-	// 如果 K8s 销毁失败，DB 保留 ACTIVE，下次 recycler 会重试。
-	tenant := model.Tenant{BaseUUIDModel: model.BaseUUIDModel{ID: cluster.TenantID}}
-	if err := provider.DestroyCluster(ctx, tenant); err != nil {
-		logger.Error("destroy cluster resource failed", zap.Error(err))
-		return
-	}
-
-	if err := TerminateCluster(ctx, db, cluster.ID); err != nil {
-		// K8s 已销毁但 DB 更新失败。DestroyCluster 是幂等的，下次 recycler 会重试销毁。
-		logger.Error("terminate cluster record failed after resource destroy, will retry", zap.Error(err))
-		return
-	}
-
-	logger.Info("cluster terminated successfully")
 }

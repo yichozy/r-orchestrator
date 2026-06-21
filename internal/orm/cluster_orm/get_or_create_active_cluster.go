@@ -39,14 +39,14 @@ func GetOrCreateActiveCluster(ctx context.Context, db *gorm.DB, cluster model.Cl
 				Where("id = ?", found.ID).
 				Updates(map[string]interface{}{
 					"status":                   cluster.Status,
-					"provider_kind":            cluster.ProviderKind,
+					"backend_name":            cluster.BackendName,
 					"billing_cycle_seconds":    cluster.BillingCycleSeconds,
 					"next_billing_boundary_at": cluster.NextBillingBoundaryAt,
 				}).Error; reactivateErr != nil {
 				return model.Cluster{}, reactivateErr
 			}
 			found.Status = cluster.Status
-			found.ProviderKind = cluster.ProviderKind
+			found.BackendName = cluster.BackendName
 			found.BillingCycleSeconds = cluster.BillingCycleSeconds
 			found.NextBillingBoundaryAt = cluster.NextBillingBoundaryAt
 		}

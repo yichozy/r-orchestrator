@@ -8,8 +8,6 @@ import (
 	"github.com/yichozy/r-orchestrator/internal/orm/task_orm"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
-
-	agent_service "github.com/yichozy/r-orchestrator/internal/service/agent_service"
 )
 
 // IsNearBoundary 判断当前时间距下次计费边界是否在阈值内。
@@ -22,10 +20,18 @@ func IsExpired(cluster model.Cluster) bool {
 	return time.Now().After(cluster.NextBillingBoundaryAt)
 }
 
+// IsIdleExpired 判断 cluster 空闲时间是否超过阈值。
+func IsIdleExpired(cluster model.Cluster, threshold time.Duration) bool {
+	if cluster.IdleSince == nil {
+		return false
+	}
+	return time.Since(*cluster.IdleSince) >= threshold
+}
+
 // ShouldTerminate 判断 cluster 是否应被销毁：
-//   - 该 tenant 无活跃任务
-//   - 无已连接的 IDLE/RUNNING agent
-func ShouldTerminate(ctx context.Context, db *gorm.DB, cluster model.Cluster) (bool, error) {
+//   - 无活跃任务
+//   - 空闲时间超过阈值
+func ShouldTerminate(ctx context.Context, db *gorm.DB, cluster model.Cluster, idleThreshold time.Duration) (bool, error) {
 	activeCount, err := task_orm.CountActiveTasks(ctx, db, cluster.TenantID)
 	if err != nil {
 		return false, err
@@ -38,9 +44,8 @@ func ShouldTerminate(ctx context.Context, db *gorm.DB, cluster model.Cluster) (b
 		return false, nil
 	}
 
-	activeTenants := agent_service.GetActiveTenantIDs()
-	if activeTenants[cluster.TenantID] {
-		zap.L().Named("billing").Debug("cluster has connected agents, skip terminate",
+	if !IsIdleExpired(cluster, idleThreshold) {
+		zap.L().Named("billing").Debug("cluster idle but threshold not reached, skip terminate",
 			zap.Stringer("cluster_id", cluster.ID),
 		)
 		return false, nil

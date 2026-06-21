@@ -18,9 +18,10 @@ type Cluster struct {
 	BaseUUIDModel
 	TenantID              uuid.UUID `gorm:"column:tenant_id;uniqueIndex;not null;type:uuid"`
 	Status                string    `gorm:"column:status;not null"`
-	ProviderKind          string    `gorm:"column:provider_kind;not null"`
+	BackendName           string    `gorm:"column:backend_name;not null"`
 	BillingCycleSeconds   int       `gorm:"column:billing_cycle_seconds;not null;default:3600"`
 	NextBillingBoundaryAt time.Time `gorm:"column:next_billing_boundary_at;not null"`
+	IdleSince           *time.Time `gorm:"column:idle_since"`
 }
 
 func (Cluster) TableName() string { return "clusters" }

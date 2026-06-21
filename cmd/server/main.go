@@ -125,7 +125,7 @@ func main() {
 	}()
 	go func() {
 		defer wg.Done()
-		cluster_service.RecycleClusters(ctx, db, k8s_provider, 30*time.Second, cfg.Cluster.BillingAdvanceSeconds)
+		cluster_service.RecycleClusters(ctx, registry)
 	}()
 	go func() {
 		defer wg.Done()

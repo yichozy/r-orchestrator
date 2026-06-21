@@ -98,9 +98,9 @@ func PollPendingTasks(ctx context.Context, registry *backend.Registry) {
 
 				_, err = cluster_orm.GetOrCreateActiveCluster(ctx, db, model.Cluster{
 					TenantID:              tenant.ID,
-					ProviderKind:          tenant.PrimaryBackendName,
+					BackendName:           tenant.PrimaryBackendName,
 					Status:                string(model.ClusterStatusProvisioning),
-					BillingCycleSeconds:  billingCycleSeconds,
+					BillingCycleSeconds:   billingCycleSeconds,
 					NextBillingBoundaryAt: time.Now().Add(time.Duration(billingCycleSeconds) * time.Second),
 				})
 				if err != nil {
