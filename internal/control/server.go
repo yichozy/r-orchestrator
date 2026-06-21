@@ -114,6 +114,11 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 		return err
 	}
 
+	server.logger.Info("agent ready",
+		zap.String("agent_id", agentID),
+		zap.String("status", registered_agent.Status),
+	)
+
 	// If reconnection restored a RESULT_READY agent, fetch the result now.
 	// On reconnect we always send FetchShardResult regardless of shard DB status,
 	// so the agent can re-upload if needed.
