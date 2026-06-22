@@ -22,7 +22,14 @@ type Config struct {
 	ServerPublicURL  string
 	KubeConfigPath   string
 	AgentLogLevel    string
-	AgentParallelism string
+	OSS              OSSPodConfig
+}
+
+type OSSPodConfig struct {
+	Endpoint     string
+	Bucket       string
+	AccessKey    string
+	AccessSecret string
 }
 
 // K8sProvider 通过 Kubernetes API 管理 agent 部署

@@ -45,10 +45,17 @@ type ClusterConfig struct {
 	AgentToken            string
 	AgentImage            string
 	AgentLogLevel         string
-	AgentParallelism      string
 	AgentHeartbeatTimeout time.Duration
 	AgentDisconnectGrace  time.Duration
 	Kubernetes            KubernetesBackendConfig
+	OSS                   OSSConfig
+}
+
+type OSSConfig struct {
+	Endpoint     string
+	Bucket       string
+	AccessKey    string
+	AccessSecret string
 }
 
 type KubernetesBackendConfig struct {
@@ -124,9 +131,14 @@ func LoadFromEnv() (Config, error) {
 			AgentToken:            agentToken,
 			AgentImage:            envOr("CLUSTER_AGENT_IMAGE", "r-orchestrator/agent:latest"),
 			AgentLogLevel:         envOr("CLUSTER_AGENT_LOG_LEVEL", "info"),
-			AgentParallelism:      envOr("CLUSTER_AGENT_PARALLELISM", "1"),
 			AgentHeartbeatTimeout: envOrDuration("CLUSTER_AGENT_HEARTBEAT_TIMEOUT", 90*time.Second),
 			AgentDisconnectGrace:  envOrDuration("CLUSTER_AGENT_DISCONNECT_GRACE", 5*time.Minute),
+			OSS: OSSConfig{
+				Endpoint:     os.Getenv("ALIYUN_OSS_ENDPOINT"),
+				Bucket:       os.Getenv("ALIYUN_OSS_BUCKET"),
+				AccessKey:    os.Getenv("ALIYUN_OSS_ACCESS_KEY"),
+				AccessSecret: os.Getenv("ALIYUN_OSS_ACCESS_SECRET"),
+			},
 			Kubernetes: KubernetesBackendConfig{
 				Namespace:        envOr("CLUSTER_KUBERNETES_NAMESPACE", "r-agents"),
 				ImagePullSecrets: parseImagePullSecrets(os.Getenv("CLUSTER_KUBERNETES_IMAGE_PULL_SECRETS")),
