@@ -8,32 +8,19 @@ import (
 	"github.com/google/uuid"
 	"github.com/yichozy/r-orchestrator/internal/model"
 	"github.com/yichozy/r-orchestrator/internal/orm"
-	"github.com/yichozy/r-orchestrator/internal/orm/artifact_orm"
 	"github.com/yichozy/r-orchestrator/internal/orm/task_shard_orm"
-	"github.com/yichozy/r-orchestrator/internal/util"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-type StoreShardOutputFunc func(ctx context.Context, tx *gorm.DB, task model.Task, shard model.TaskShard, outputCSV []byte) error
-
-// defaultStoreShardOutputFn is the global override for shard output persistence.
-// Set via SetStoreShardOutputFunc for test use.
-var defaultStoreShardOutputFn StoreShardOutputFunc
-
-// SetStoreShardOutputFunc sets a global override for shard output persistence.
-func SetStoreShardOutputFunc(fn StoreShardOutputFunc) {
-	defaultStoreShardOutputFn = fn
-}
-
 var reportShardStatusAfterTaskLockHook func(tx *gorm.DB, taskID, shardID uuid.UUID)
 
 type ReportShardStatusParams struct {
-	ShardID            uuid.UUID
-	ShardStatus        string
-	ErrorMessage       *string
-	OutputCSV          []byte
-	StoreShardOutputFn StoreShardOutputFunc
+	ShardID       uuid.UUID
+	ShardStatus   string
+	ErrorMessage  *string
+	OutputOSSKey  string
+	OutputSHA256  string
 }
 
 func ReportShardStatus(ctx context.Context, params ReportShardStatusParams) error {
@@ -59,15 +46,12 @@ func ReportShardStatus(ctx context.Context, params ReportShardStatusParams) erro
 			First(&task).Error; err != nil {
 			return fmt.Errorf("load task: %w", err)
 		}
-		if params.ShardStatus == model.ShardStatusSucceeded && shard.Status == model.ShardStatusSucceeded {
-			exists, err := shardOutputArtifactExists(ctx, tx, shard.TaskID, shard.ShardIndex)
-			if err != nil {
-				return fmt.Errorf("check existing shard output: %w", err)
-			}
-			if exists {
-				return nil
-			}
+
+		// Skip duplicate SUCCEEDED reports.
+		if params.ShardStatus == model.ShardStatusSucceeded && shard.Status == model.ShardStatusSucceeded && shard.OutputOSSKey != "" {
+			return nil
 		}
+
 		if task.Status == model.TaskStatusCancelled {
 			return fmt.Errorf("report shard %s: task %q is cancelled", params.ShardStatus, shard.TaskID)
 		}
@@ -99,6 +83,19 @@ func ReportShardStatus(ctx context.Context, params ReportShardStatusParams) erro
 			return fmt.Errorf("report shard %s: %w", params.ShardStatus, err)
 		}
 
+		if params.ShardStatus == model.ShardStatusSucceeded {
+			// Update shard with OSS output details.
+			if err := tx.WithContext(ctx).
+				Model(&model.TaskShard{}).
+				Where("id = ?", params.ShardID).
+				Updates(map[string]any{
+					"output_oss_key": params.OutputOSSKey,
+					"output_sha256":  params.OutputSHA256,
+				}).Error; err != nil {
+				return fmt.Errorf("update shard oss output: %w", err)
+			}
+		}
+
 		if params.ShardStatus == model.ShardStatusRunning {
 			updates := map[string]any{"status": model.TaskStatusRunning}
 			if task.StartedAt == nil {
@@ -115,11 +112,6 @@ func ReportShardStatus(ctx context.Context, params ReportShardStatusParams) erro
 				return fmt.Errorf("mark task running: task %q is cancelled", shard.TaskID)
 			}
 		} else if params.ShardStatus == model.ShardStatusSucceeded || params.ShardStatus == model.ShardStatusFailed {
-			if params.ShardStatus == model.ShardStatusSucceeded {
-				if err := storeShardOutput(ctx, tx, task, shard, params.OutputCSV, params.StoreShardOutputFn); err != nil {
-					return fmt.Errorf("store shard output: %w", err)
-				}
-			}
 			lastError := ""
 			if params.ErrorMessage != nil {
 				lastError = *params.ErrorMessage
@@ -142,55 +134,4 @@ func ReportShardStatus(ctx context.Context, params ReportShardStatusParams) erro
 	}
 
 	return nil
-}
-
-func storeShardOutput(
-	ctx context.Context,
-	tx *gorm.DB,
-	task model.Task,
-	shard model.TaskShard,
-	outputCSV []byte,
-	storeFn StoreShardOutputFunc,
-) error {
-	if storeFn != nil {
-		return storeFn(ctx, tx, task, shard, outputCSV)
-	}
-	if defaultStoreShardOutputFn != nil {
-		return defaultStoreShardOutputFn(ctx, tx, task, shard, outputCSV)
-	}
-
-	artifactID, err := uuid.NewV7()
-	if err != nil {
-		return fmt.Errorf("generate artifact id: %w", err)
-	}
-	shardIndex := shard.ShardIndex
-	contentBytes := append([]byte{}, outputCSV...)
-	if err := artifact_orm.Create(ctx, tx, model.Artifact{
-		BaseUUIDModel: model.BaseUUIDModel{ID: artifactID},
-		TenantID:      task.TenantID,
-		TaskID:        task.ID,
-		ArtifactType:  model.ArtifactTypeShardOutput,
-		ContentBytes:  contentBytes,
-		ContentSize:   int64(len(outputCSV)),
-		SHA256:        util.SumSHA256(outputCSV),
-		ShardIndex:    &shardIndex,
-	}); err != nil {
-		return fmt.Errorf("create shard output artifact: %w", err)
-	}
-
-	return nil
-}
-
-func shardOutputArtifactExists(ctx context.Context, tx *gorm.DB, taskID uuid.UUID, shardIndex int) (bool, error) {
-	var count int64
-	if err := tx.WithContext(ctx).
-		Model(&model.Artifact{}).
-		Where("task_id = ?", taskID).
-		Where("artifact_type = ?", model.ArtifactTypeShardOutput).
-		Where("shard_index = ?", shardIndex).
-		Count(&count).Error; err != nil {
-		return false, err
-	}
-
-	return count > 0, nil
 }

@@ -13,13 +13,10 @@ var notifyCancelShard func(ctx context.Context, agentID string, shardID uuid.UUI
 
 var ErrTaskNotFound = errors.New("task not found")
 var ErrTenantNotFound = errors.New("tenant not found")
-var ErrTaskNotSucceeded = errors.New("task is not succeeded")
-var ErrTaskResultNotFound = errors.New("task result not found")
 
 type SubmitTaskParams struct {
 	TenantName        string
 	ZipBytes          []byte
-	CSVBytes          []byte
 	CompletionHookURL string
 }
 
@@ -34,11 +31,14 @@ type TaskView struct {
 	LastError  string
 }
 
-type TaskResultCSVView struct {
-	TaskID      uuid.UUID
-	Filename    string
-	ContentType string
-	CSVContent  string
+type TaskScriptView struct {
+	ScriptName    string
+	Status        string
+	OutputOSSKey  string
+	OutputSHA256  string
+	ErrorMessage  string
+	StartedAt     *time.Time
+	FinishedAt    *time.Time
 }
 
 type CompletionHookPayload struct {

@@ -8,13 +8,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/yichozy/r-orchestrator/internal/model"
-	"github.com/yichozy/r-orchestrator/internal/orm/artifact_orm"
-	"github.com/yichozy/r-orchestrator/internal/util"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
-
-var recomputeTaskStatusBeforeTerminalUpdateHook func(taskID uuid.UUID)
 
 func RecomputeTaskStatus(ctx context.Context, db *gorm.DB, taskID uuid.UUID, lastError string) (*CompletionHookPayload, error) {
 	terminalStatuses := []string{model.TaskStatusSucceeded, model.TaskStatusFailed, model.TaskStatusCancelled}
@@ -59,6 +55,7 @@ func RecomputeTaskStatus(ctx context.Context, db *gorm.DB, taskID uuid.UUID, las
 	updates := map[string]any{
 		"finished_at": finishedAt,
 	}
+
 	if failedCount > 0 {
 		resolvedLastError, err := resolveTaskFailureLastError(ctx, db, taskID, lastError)
 		if err != nil {
@@ -66,7 +63,6 @@ func RecomputeTaskStatus(ctx context.Context, db *gorm.DB, taskID uuid.UUID, las
 		}
 		updates["status"] = model.TaskStatusFailed
 		updates["last_error"] = resolvedLastError
-		updates["result_artifact_id"] = nil
 		updated, err := updateTaskTerminalStatus(ctx, db, taskID, updates, terminalStatuses)
 		if err != nil {
 			return nil, err
@@ -75,54 +71,13 @@ func RecomputeTaskStatus(ctx context.Context, db *gorm.DB, taskID uuid.UUID, las
 			return newCompletionHookPayload(task, model.TaskStatusFailed, resolvedLastError, &finishedAt, false), nil
 		}
 	} else {
-		shardArtifacts, err := artifact_orm.ListByTaskAndType(ctx, db, taskID, model.ArtifactTypeShardOutput)
+		updates["status"] = model.TaskStatusSucceeded
+		updates["last_error"] = ""
+		updated, err := updateTaskTerminalStatus(ctx, db, taskID, updates, terminalStatuses)
 		if err != nil {
-			return nil, fmt.Errorf("load shard outputs: %w", err)
+			return nil, err
 		}
-		resultBytes, err := aggregateTaskResultCSV(shardArtifacts, task.ShardCount)
-		if err != nil {
-			updates["status"] = model.TaskStatusFailed
-			updates["last_error"] = err.Error()
-			updates["result_artifact_id"] = nil
-			updated, updateErr := updateTaskTerminalStatus(ctx, db, taskID, updates, terminalStatuses)
-			if updateErr != nil {
-				return nil, updateErr
-			}
-			if updated {
-				return newCompletionHookPayload(task, model.TaskStatusFailed, err.Error(), &finishedAt, false), nil
-			}
-		} else {
-			resultArtifactID, err := uuid.NewV7()
-			if err != nil {
-				return nil, fmt.Errorf("generate result artifact id: %w", err)
-			}
-			if err := artifact_orm.Create(ctx, db, model.Artifact{
-				BaseUUIDModel: model.BaseUUIDModel{ID: resultArtifactID},
-				TenantID:      task.TenantID,
-				TaskID:        taskID,
-				ArtifactType:  model.ArtifactTypeTaskOutput,
-				ContentBytes:  resultBytes,
-				ContentSize:   int64(len(resultBytes)),
-				SHA256:        util.SumSHA256(resultBytes),
-			}); err != nil {
-				return nil, fmt.Errorf("create task output artifact: %w", err)
-			}
-			if recomputeTaskStatusBeforeTerminalUpdateHook != nil {
-				recomputeTaskStatusBeforeTerminalUpdateHook(taskID)
-			}
-			updates["status"] = model.TaskStatusSucceeded
-			updates["last_error"] = ""
-			updates["result_artifact_id"] = resultArtifactID
-			updated, err := updateTaskTerminalStatus(ctx, db, taskID, updates, terminalStatuses)
-			if err != nil {
-				return nil, err
-			}
-			if !updated {
-				if err := db.WithContext(ctx).Delete(&model.Artifact{}, "id = ?", resultArtifactID).Error; err != nil {
-					return nil, fmt.Errorf("cleanup unreferenced task output artifact: %w", err)
-				}
-				return nil, nil
-			}
+		if updated {
 			return newCompletionHookPayload(task, model.TaskStatusSucceeded, "", &finishedAt, true), nil
 		}
 	}

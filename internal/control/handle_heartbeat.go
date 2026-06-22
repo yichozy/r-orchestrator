@@ -76,12 +76,8 @@ func (server *Server) HandleHeartbeat(sess *agentSession, heartbeat *controlv1.H
 			}
 		} else {
 			switch shard.Status {
-			case model.ShardStatusResultReady:
-				if err := sess.Send(&controlv1.ServerMessage{Payload: &controlv1.ServerMessage_FetchShardResult{FetchShardResult: &controlv1.FetchShardResult{ShardId: parsedShardID.String()}}}); err != nil {
-					return err
-				}
 			case model.ShardStatusSucceeded:
-				// Result already stored (ShardResultData was processed), skip ack to avoid duplicate.
+				// Result already stored, reset agent to idle and assign next.
 				if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
 					AgentID:        sess.agentID,
 					Status:         agent_service.AgentStatusIdle,
@@ -90,6 +86,8 @@ func (server *Server) HandleHeartbeat(sess *agentSession, heartbeat *controlv1.H
 					return status.Errorf(codes.Internal, "reset agent idle: %v", err)
 				}
 				return server.TryAssignShard(sess)
+			default:
+				// Agent still processing, wait for ShardResultReady message.
 			}
 		}
 

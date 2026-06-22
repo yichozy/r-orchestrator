@@ -6,7 +6,6 @@ option go_package = "github.com/yichozy/r-orchestrator/proto/controlv1";
 
 service ControlService {
   rpc OpenControlStream(stream AgentMessage) returns (stream ServerMessage);
-  rpc FetchArtifact(FetchArtifactRequest) returns (stream FetchArtifactChunk);
 }
 
 message AgentMessage {
@@ -15,10 +14,8 @@ message AgentMessage {
     Heartbeat heartbeat = 2;
     ShardAccepted shard_accepted = 3;
     ShardStarted shard_started = 4;
-    ShardCompleted shard_completed = 5;
-    ShardFailed shard_failed = 6;
-    ShardResultReady shard_result_ready = 7;
-    ShardResultData shard_result_data = 8;
+    ShardFailed shard_failed = 5;
+    ShardResultReady shard_result_ready = 6;
   }
 }
 
@@ -28,8 +25,7 @@ message ServerMessage {
     Drain drain = 2;
     Shutdown shutdown = 3;
     CancelShard cancel_shard = 4;
-    FetchShardResult fetch_shard_result = 5;
-    ShardResultStored shard_result_stored = 6;
+    ShardResultStored shard_result_stored = 5;
   }
 }
 
@@ -50,9 +46,9 @@ message Heartbeat {
 message AssignShard {
   string shard_id = 1;
   string task_id = 2;
-  string bundle_artifact_id = 3;
-  string input_csv_artifact_id = 4;
-  int32 shard_index = 5;
+  string script_name = 3;
+  string bundle_oss_key = 4;
+  string output_oss_prefix = 5;
   int32 total_shards = 6;
 }
 
@@ -61,21 +57,10 @@ message Shutdown {}
 message CancelShard { string shard_id = 1; }
 message ShardAccepted { string shard_id = 1; }
 message ShardStarted { string shard_id = 1; }
-message ShardCompleted {
-  string shard_id = 1;
-  bytes output_csv = 2;
-}
+message ShardFailed { string shard_id = 1; string error_message = 2; }
 message ShardResultReady {
   string shard_id = 1;
-  int64 output_size = 2;
+  string output_oss_key = 2;
   string sha256 = 3;
 }
-message ShardResultData {
-  string shard_id = 1;
-  bytes output_csv = 2;
-}
-message FetchShardResult { string shard_id = 1; }
 message ShardResultStored { string shard_id = 1; }
-message ShardFailed { string shard_id = 1; string error_message = 2; }
-message FetchArtifactRequest { string artifact_id = 1; int32 shard_index = 2; int32 total_shards = 3; }
-message FetchArtifactChunk { bytes data = 1; }

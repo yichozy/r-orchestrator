@@ -50,9 +50,8 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		GetTaskByID      func(childComplexity int, tenantName string, taskID uuid.UUID) int
-		GetTaskList      func(childComplexity int, tenantName string, status *string) int
-		GetTaskResultCSV func(childComplexity int, tenantName string, taskID uuid.UUID) int
+		GetTaskByID func(childComplexity int, tenantName string, taskID uuid.UUID) int
+		GetTaskList func(childComplexity int, tenantName string, status *string) int
 	}
 
 	SubmitTaskResponse struct {
@@ -64,17 +63,23 @@ type ComplexityRoot struct {
 		FinishedAt func(childComplexity int) int
 		ID         func(childComplexity int) int
 		LastError  func(childComplexity int) int
+		Scripts    func(childComplexity int) int
 		ShardCount func(childComplexity int) int
 		StartedAt  func(childComplexity int) int
 		Status     func(childComplexity int) int
 		TenantName func(childComplexity int) int
 	}
 
-	TaskResultCSV struct {
-		CSVContent  func(childComplexity int) int
-		ContentType func(childComplexity int) int
-		Filename    func(childComplexity int) int
-		TaskID      func(childComplexity int) int
+	TaskScript struct {
+		ErrorMessage func(childComplexity int) int
+		FinishedAt   func(childComplexity int) int
+		OutputOssKey func(childComplexity int) int
+		OutputSha256 func(childComplexity int) int
+		OutputSize   func(childComplexity int) int
+		ScriptName   func(childComplexity int) int
+		ShardIndex   func(childComplexity int) int
+		StartedAt    func(childComplexity int) int
+		Status       func(childComplexity int) int
 	}
 
 	Tenant struct {
@@ -93,7 +98,6 @@ type MutationResolver interface {
 type QueryResolver interface {
 	GetTaskByID(ctx context.Context, tenantName string, taskID uuid.UUID) (*model.Task, error)
 	GetTaskList(ctx context.Context, tenantName string, status *string) ([]*model.Task, error)
-	GetTaskResultCSV(ctx context.Context, tenantName string, taskID uuid.UUID) (*model.TaskResultCSV, error)
 }
 
 type executableSchema graphql.ExecutableSchemaState[ResolverRoot, DirectiveRoot, ComplexityRoot]
@@ -179,17 +183,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.GetTaskList(childComplexity, args["tenant_name"].(string), args["status"].(*string)), true
-	case "Query.GetTaskResultCSV":
-		if e.ComplexityRoot.Query.GetTaskResultCSV == nil {
-			break
-		}
-
-		args, err := ec.field_Query_GetTaskResultCSV_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Query.GetTaskResultCSV(childComplexity, args["tenant_name"].(string), args["task_id"].(uuid.UUID)), true
 
 	case "SubmitTaskResponse.task_id":
 		if e.ComplexityRoot.SubmitTaskResponse.TaskID == nil {
@@ -222,6 +215,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Task.LastError(childComplexity), true
+	case "Task.scripts":
+		if e.ComplexityRoot.Task.Scripts == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.Scripts(childComplexity), true
 	case "Task.shard_count":
 		if e.ComplexityRoot.Task.ShardCount == nil {
 			break
@@ -247,30 +246,60 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Task.TenantName(childComplexity), true
 
-	case "TaskResultCSV.csv_content":
-		if e.ComplexityRoot.TaskResultCSV.CSVContent == nil {
+	case "TaskScript.error_message":
+		if e.ComplexityRoot.TaskScript.ErrorMessage == nil {
 			break
 		}
 
-		return e.ComplexityRoot.TaskResultCSV.CSVContent(childComplexity), true
-	case "TaskResultCSV.content_type":
-		if e.ComplexityRoot.TaskResultCSV.ContentType == nil {
+		return e.ComplexityRoot.TaskScript.ErrorMessage(childComplexity), true
+	case "TaskScript.finished_at":
+		if e.ComplexityRoot.TaskScript.FinishedAt == nil {
 			break
 		}
 
-		return e.ComplexityRoot.TaskResultCSV.ContentType(childComplexity), true
-	case "TaskResultCSV.filename":
-		if e.ComplexityRoot.TaskResultCSV.Filename == nil {
+		return e.ComplexityRoot.TaskScript.FinishedAt(childComplexity), true
+	case "TaskScript.output_oss_key":
+		if e.ComplexityRoot.TaskScript.OutputOssKey == nil {
 			break
 		}
 
-		return e.ComplexityRoot.TaskResultCSV.Filename(childComplexity), true
-	case "TaskResultCSV.task_id":
-		if e.ComplexityRoot.TaskResultCSV.TaskID == nil {
+		return e.ComplexityRoot.TaskScript.OutputOssKey(childComplexity), true
+	case "TaskScript.output_sha256":
+		if e.ComplexityRoot.TaskScript.OutputSha256 == nil {
 			break
 		}
 
-		return e.ComplexityRoot.TaskResultCSV.TaskID(childComplexity), true
+		return e.ComplexityRoot.TaskScript.OutputSha256(childComplexity), true
+	case "TaskScript.output_size":
+		if e.ComplexityRoot.TaskScript.OutputSize == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TaskScript.OutputSize(childComplexity), true
+	case "TaskScript.script_name":
+		if e.ComplexityRoot.TaskScript.ScriptName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TaskScript.ScriptName(childComplexity), true
+	case "TaskScript.shard_index":
+		if e.ComplexityRoot.TaskScript.ShardIndex == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TaskScript.ShardIndex(childComplexity), true
+	case "TaskScript.started_at":
+		if e.ComplexityRoot.TaskScript.StartedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TaskScript.StartedAt(childComplexity), true
+	case "TaskScript.status":
+		if e.ComplexityRoot.TaskScript.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TaskScript.Status(childComplexity), true
 
 	case "Tenant.id":
 		if e.ComplexityRoot.Tenant.ID == nil {
@@ -388,12 +417,23 @@ scalar Time
 type Query {
   GetTaskByID(tenant_name: String!, task_id: UUID!): Task!
   GetTaskList(tenant_name: String!, status: String): [Task!]!
-  GetTaskResultCSV(tenant_name: String!, task_id: UUID!): TaskResultCSV!
 }
 
 type Mutation {
   SubmitTask(input: SubmitTaskInput!): SubmitTaskResponse!
   CancelTask(tenant_name: String!, task_id: UUID!): CancelTaskPayload!
+}
+
+type TaskScript {
+  script_name: String!
+  shard_index: Int!
+  status: String!
+  output_oss_key: String
+  output_size: Int
+  output_sha256: String
+  error_message: String
+  started_at: Time
+  finished_at: Time
 }
 
 type Task {
@@ -405,12 +445,12 @@ type Task {
   started_at: Time
   finished_at: Time
   shard_count: Int!
+  scripts: [TaskScript!]!
 }
 
 input SubmitTaskInput {
   tenant_name: String!
-  r_zip_file: Upload!
-  parameters_csv_file: Upload!
+  bundle_zip: Upload!
   completion_hook_url: String
 }
 
@@ -421,13 +461,6 @@ type CancelTaskPayload {
 
 type SubmitTaskResponse {
   task_id: UUID!
-}
-
-type TaskResultCSV {
-  task_id: UUID!
-  filename: String!
-  content_type: String!
-  csv_content: String!
 }
 `, BuiltIn: false},
 	{Name: "../schema/tenant.graphqls", Input: `scalar Upload
@@ -492,22 +525,34 @@ func (ec *executionContext) childFields_Task(ctx context.Context, field graphql.
 		return ec.fieldContext_Task_finished_at(ctx, field)
 	case "shard_count":
 		return ec.fieldContext_Task_shard_count(ctx, field)
+	case "scripts":
+		return ec.fieldContext_Task_scripts(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Task", field.Name)
 }
 
-func (ec *executionContext) childFields_TaskResultCSV(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+func (ec *executionContext) childFields_TaskScript(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
-	case "task_id":
-		return ec.fieldContext_TaskResultCSV_task_id(ctx, field)
-	case "filename":
-		return ec.fieldContext_TaskResultCSV_filename(ctx, field)
-	case "content_type":
-		return ec.fieldContext_TaskResultCSV_content_type(ctx, field)
-	case "csv_content":
-		return ec.fieldContext_TaskResultCSV_csv_content(ctx, field)
+	case "script_name":
+		return ec.fieldContext_TaskScript_script_name(ctx, field)
+	case "shard_index":
+		return ec.fieldContext_TaskScript_shard_index(ctx, field)
+	case "status":
+		return ec.fieldContext_TaskScript_status(ctx, field)
+	case "output_oss_key":
+		return ec.fieldContext_TaskScript_output_oss_key(ctx, field)
+	case "output_size":
+		return ec.fieldContext_TaskScript_output_size(ctx, field)
+	case "output_sha256":
+		return ec.fieldContext_TaskScript_output_sha256(ctx, field)
+	case "error_message":
+		return ec.fieldContext_TaskScript_error_message(ctx, field)
+	case "started_at":
+		return ec.fieldContext_TaskScript_started_at(ctx, field)
+	case "finished_at":
+		return ec.fieldContext_TaskScript_finished_at(ctx, field)
 	}
-	return nil, fmt.Errorf("no field named %q was found under type TaskResultCSV", field.Name)
+	return nil, fmt.Errorf("no field named %q was found under type TaskScript", field.Name)
 }
 
 func (ec *executionContext) childFields_Tenant(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -731,28 +776,6 @@ func (ec *executionContext) field_Query_GetTaskList_args(ctx context.Context, ra
 		return nil, err
 	}
 	args["status"] = arg1
-	return args, nil
-}
-
-func (ec *executionContext) field_Query_GetTaskResultCSV_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "tenant_name",
-		func(ctx context.Context, v any) (string, error) {
-			return ec.unmarshalNString2string(ctx, v)
-		})
-	if err != nil {
-		return nil, err
-	}
-	args["tenant_name"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "task_id",
-		func(ctx context.Context, v any) (uuid.UUID, error) {
-			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
-		})
-	if err != nil {
-		return nil, err
-	}
-	args["task_id"] = arg1
 	return args, nil
 }
 
@@ -1100,50 +1123,6 @@ func (ec *executionContext) fieldContext_Query_GetTaskList(ctx context.Context, 
 	return fc, nil
 }
 
-func (ec *executionContext) _Query_GetTaskResultCSV(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_Query_GetTaskResultCSV(ctx, field)
-		},
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().GetTaskResultCSV(ctx, fc.Args["tenant_name"].(string), fc.Args["task_id"].(uuid.UUID))
-		},
-		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v *model.TaskResultCSV) graphql.Marshaler {
-			return ec.marshalNTaskResultCSV2ᚖgithubᚗcomᚋyichozyᚋrᚑorchestratorᚋgraphᚋmodelᚐTaskResultCSV(ctx, selections, v)
-		},
-		true,
-		true,
-	)
-}
-func (ec *executionContext) fieldContext_Query_GetTaskResultCSV(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Query",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.childFields_TaskResultCSV(ctx, field)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_GetTaskResultCSV_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Query___type(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -1427,39 +1406,48 @@ func (ec *executionContext) fieldContext_Task_shard_count(_ context.Context, fie
 	return graphql.NewScalarFieldContext("Task", field, false, false, errors.New("field of type Int does not have child fields"))
 }
 
-func (ec *executionContext) _TaskResultCSV_task_id(ctx context.Context, field graphql.CollectedField, obj *model.TaskResultCSV) (ret graphql.Marshaler) {
+func (ec *executionContext) _Task_scripts(ctx context.Context, field graphql.CollectedField, obj *model.Task) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_TaskResultCSV_task_id(ctx, field)
+			return ec.fieldContext_Task_scripts(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.TaskID, nil
+			return obj.Scripts, nil
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
-			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v []*model.TaskScript) graphql.Marshaler {
+			return ec.marshalNTaskScript2ᚕᚖgithubᚗcomᚋyichozyᚋrᚑorchestratorᚋgraphᚋmodelᚐTaskScriptᚄ(ctx, selections, v)
 		},
 		true,
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_TaskResultCSV_task_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("TaskResultCSV", field, false, false, errors.New("field of type UUID does not have child fields"))
+func (ec *executionContext) fieldContext_Task_scripts(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Task",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_TaskScript(ctx, field)
+		},
+	}
+	return fc, nil
 }
 
-func (ec *executionContext) _TaskResultCSV_filename(ctx context.Context, field graphql.CollectedField, obj *model.TaskResultCSV) (ret graphql.Marshaler) {
+func (ec *executionContext) _TaskScript_script_name(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_TaskResultCSV_filename(ctx, field)
+			return ec.fieldContext_TaskScript_script_name(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.Filename, nil
+			return obj.ScriptName, nil
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
@@ -1469,20 +1457,43 @@ func (ec *executionContext) _TaskResultCSV_filename(ctx context.Context, field g
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_TaskResultCSV_filename(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("TaskResultCSV", field, false, false, errors.New("field of type String does not have child fields"))
+func (ec *executionContext) fieldContext_TaskScript_script_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
-func (ec *executionContext) _TaskResultCSV_content_type(ctx context.Context, field graphql.CollectedField, obj *model.TaskResultCSV) (ret graphql.Marshaler) {
+func (ec *executionContext) _TaskScript_shard_index(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_TaskResultCSV_content_type(ctx, field)
+			return ec.fieldContext_TaskScript_shard_index(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.ContentType, nil
+			return obj.ShardIndex, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TaskScript_shard_index(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _TaskScript_status(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TaskScript_status(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
@@ -1492,31 +1503,146 @@ func (ec *executionContext) _TaskResultCSV_content_type(ctx context.Context, fie
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_TaskResultCSV_content_type(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("TaskResultCSV", field, false, false, errors.New("field of type String does not have child fields"))
+func (ec *executionContext) fieldContext_TaskScript_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
-func (ec *executionContext) _TaskResultCSV_csv_content(ctx context.Context, field graphql.CollectedField, obj *model.TaskResultCSV) (ret graphql.Marshaler) {
+func (ec *executionContext) _TaskScript_output_oss_key(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_TaskResultCSV_csv_content(ctx, field)
+			return ec.fieldContext_TaskScript_output_oss_key(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.CSVContent, nil
+			return obj.OutputOssKey, nil
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
-			return ec.marshalNString2string(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
 		},
 		true,
-		true,
+		false,
 	)
 }
-func (ec *executionContext) fieldContext_TaskResultCSV_csv_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("TaskResultCSV", field, false, false, errors.New("field of type String does not have child fields"))
+func (ec *executionContext) fieldContext_TaskScript_output_oss_key(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TaskScript_output_size(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TaskScript_output_size(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.OutputSize, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *int) graphql.Marshaler {
+			return ec.marshalOInt2ᚖint(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TaskScript_output_size(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _TaskScript_output_sha256(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TaskScript_output_sha256(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.OutputSha256, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TaskScript_output_sha256(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TaskScript_error_message(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TaskScript_error_message(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ErrorMessage, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TaskScript_error_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _TaskScript_started_at(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TaskScript_started_at(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.StartedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TaskScript_started_at(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type Time does not have child fields"))
+}
+
+func (ec *executionContext) _TaskScript_finished_at(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TaskScript_finished_at(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.FinishedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TaskScript_finished_at(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type Time does not have child fields"))
 }
 
 func (ec *executionContext) _Tenant_id(ctx context.Context, field graphql.CollectedField, obj *model.Tenant) (ret graphql.Marshaler) {
@@ -2725,7 +2851,7 @@ func (ec *executionContext) unmarshalInputSubmitTaskInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"tenant_name", "r_zip_file", "parameters_csv_file", "completion_hook_url"}
+	fieldsInOrder := [...]string{"tenant_name", "bundle_zip", "completion_hook_url"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -2739,20 +2865,13 @@ func (ec *executionContext) unmarshalInputSubmitTaskInput(ctx context.Context, o
 				return it, err
 			}
 			it.TenantName = data
-		case "r_zip_file":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("r_zip_file"))
+		case "bundle_zip":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("bundle_zip"))
 			data, err := ec.unmarshalNUpload2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚐUpload(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.RZipFile = data
-		case "parameters_csv_file":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("parameters_csv_file"))
-			data, err := ec.unmarshalNUpload2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚐUpload(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.ParametersCSVFile = data
+			it.BundleZip = data
 		case "completion_hook_url":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("completion_hook_url"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -2943,28 +3062,6 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "GetTaskResultCSV":
-			field := field
-
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Query_GetTaskResultCSV(ctx, field)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
-				return res
-			}
-
-			rrm := func(ctx context.Context) graphql.Marshaler {
-				return ec.OperationContext.RootResolverMiddleware(ctx,
-					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "__type":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___type(ctx, field)
@@ -3080,6 +3177,11 @@ func (ec *executionContext) _Task(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "scripts":
+			out.Values[i] = ec._Task_scripts(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -3103,37 +3205,44 @@ func (ec *executionContext) _Task(ctx context.Context, sel ast.SelectionSet, obj
 	return out
 }
 
-var taskResultCSVImplementors = []string{"TaskResultCSV"}
+var taskScriptImplementors = []string{"TaskScript"}
 
-func (ec *executionContext) _TaskResultCSV(ctx context.Context, sel ast.SelectionSet, obj *model.TaskResultCSV) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, taskResultCSVImplementors)
+func (ec *executionContext) _TaskScript(ctx context.Context, sel ast.SelectionSet, obj *model.TaskScript) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, taskScriptImplementors)
 
 	out := graphql.NewFieldSet(fields)
 	deferred := make(map[string]*graphql.FieldSet)
 	for i, field := range fields {
 		switch field.Name {
 		case "__typename":
-			out.Values[i] = graphql.MarshalString("TaskResultCSV")
-		case "task_id":
-			out.Values[i] = ec._TaskResultCSV_task_id(ctx, field, obj)
+			out.Values[i] = graphql.MarshalString("TaskScript")
+		case "script_name":
+			out.Values[i] = ec._TaskScript_script_name(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "filename":
-			out.Values[i] = ec._TaskResultCSV_filename(ctx, field, obj)
+		case "shard_index":
+			out.Values[i] = ec._TaskScript_shard_index(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "content_type":
-			out.Values[i] = ec._TaskResultCSV_content_type(ctx, field, obj)
+		case "status":
+			out.Values[i] = ec._TaskScript_status(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "csv_content":
-			out.Values[i] = ec._TaskResultCSV_csv_content(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
+		case "output_oss_key":
+			out.Values[i] = ec._TaskScript_output_oss_key(ctx, field, obj)
+		case "output_size":
+			out.Values[i] = ec._TaskScript_output_size(ctx, field, obj)
+		case "output_sha256":
+			out.Values[i] = ec._TaskScript_output_sha256(ctx, field, obj)
+		case "error_message":
+			out.Values[i] = ec._TaskScript_error_message(ctx, field, obj)
+		case "started_at":
+			out.Values[i] = ec._TaskScript_started_at(ctx, field, obj)
+		case "finished_at":
+			out.Values[i] = ec._TaskScript_finished_at(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -3662,18 +3771,30 @@ func (ec *executionContext) marshalNTask2ᚖgithubᚗcomᚋyichozyᚋrᚑorchest
 	return ec._Task(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNTaskResultCSV2githubᚗcomᚋyichozyᚋrᚑorchestratorᚋgraphᚋmodelᚐTaskResultCSV(ctx context.Context, sel ast.SelectionSet, v model.TaskResultCSV) graphql.Marshaler {
-	return ec._TaskResultCSV(ctx, sel, &v)
+func (ec *executionContext) marshalNTaskScript2ᚕᚖgithubᚗcomᚋyichozyᚋrᚑorchestratorᚋgraphᚋmodelᚐTaskScriptᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.TaskScript) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNTaskScript2ᚖgithubᚗcomᚋyichozyᚋrᚑorchestratorᚋgraphᚋmodelᚐTaskScript(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
-func (ec *executionContext) marshalNTaskResultCSV2ᚖgithubᚗcomᚋyichozyᚋrᚑorchestratorᚋgraphᚋmodelᚐTaskResultCSV(ctx context.Context, sel ast.SelectionSet, v *model.TaskResultCSV) graphql.Marshaler {
+func (ec *executionContext) marshalNTaskScript2ᚖgithubᚗcomᚋyichozyᚋrᚑorchestratorᚋgraphᚋmodelᚐTaskScript(ctx context.Context, sel ast.SelectionSet, v *model.TaskScript) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
 		}
 		return graphql.Null
 	}
-	return ec._TaskResultCSV(ctx, sel, v)
+	return ec._TaskScript(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNTenant2githubᚗcomᚋyichozyᚋrᚑorchestratorᚋgraphᚋmodelᚐTenant(ctx context.Context, sel ast.SelectionSet, v model.Tenant) graphql.Marshaler {
@@ -3899,6 +4020,24 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	_ = sel
 	_ = ctx
 	res := graphql.MarshalBoolean(*v)
+	return res
+}
+
+func (ec *executionContext) unmarshalOInt2ᚖint(ctx context.Context, v any) (*int, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := graphql.UnmarshalInt(v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOInt2ᚖint(ctx context.Context, sel ast.SelectionSet, v *int) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	_ = sel
+	_ = ctx
+	res := graphql.MarshalInt(*v)
 	return res
 }
 

@@ -20,7 +20,7 @@ func TestUpdateShardStatusAllowsResultReadyTransition(t *testing.T) {
 	shardID := uuid.Must(uuid.NewV7())
 
 	mustCreateTask(t, ctx, db, taskID, model.TaskStatusRunning)
-	mustCreateTaskShardWithID(t, ctx, db, shardID, taskID, 0, model.ShardStatusRunning)
+	mustCreateTaskShardWithID(t, ctx, db, shardID, taskID, model.ShardStatusRunning)
 
 	now := time.Now()
 	err := UpdateShardStatus(ctx, db, UpdateShardStatusParams{
@@ -65,7 +65,7 @@ func TestUpdateShardStatusAllowsTerminalTransitionDuringMigration(t *testing.T) 
 			shardID := uuid.Must(uuid.NewV7())
 
 			mustCreateTask(t, ctx, db, taskID, model.TaskStatusRunning)
-			mustCreateTaskShardWithID(t, ctx, db, shardID, taskID, 0, tt.initialStatus)
+			mustCreateTaskShardWithID(t, ctx, db, shardID, taskID, tt.initialStatus)
 
 			now := time.Now()
 			err := UpdateShardStatus(ctx, db, UpdateShardStatusParams{
@@ -135,13 +135,12 @@ func mustCreateTask(t *testing.T, ctx context.Context, db *gorm.DB, taskID uuid.
 	}
 }
 
-func mustCreateTaskShardWithID(t *testing.T, ctx context.Context, db *gorm.DB, shardID, taskID uuid.UUID, shardIndex int, status string) {
+func mustCreateTaskShardWithID(t *testing.T, ctx context.Context, db *gorm.DB, shardID, taskID uuid.UUID, status string) {
 	t.Helper()
 
 	if err := db.WithContext(ctx).Create(&model.TaskShard{
 		BaseUUIDModel: model.BaseUUIDModel{ID: shardID},
 		TaskID:        taskID,
-		ShardIndex:    shardIndex,
 		Status:        status,
 	}).Error; err != nil {
 		t.Fatalf("create task shard: %v", err)

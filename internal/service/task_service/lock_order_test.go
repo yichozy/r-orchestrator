@@ -24,7 +24,7 @@ func TestReportShardStatusLocksTaskBeforeUpdatingShard(t *testing.T) {
 		Status:        model.TaskStatusQueued,
 		ShardCount:    1,
 	})
-	mustCreateTaskShardWithID(t, ctx, db, shardID, taskID, 0, model.ShardStatusLeased)
+	mustCreateTaskShardWithID(t, ctx, db, shardID, taskID, model.ShardStatusLeased)
 
 	hookCalled := false
 	reportShardStatusAfterTaskLockHook = func(tx *gorm.DB, gotTaskID, gotShardID uuid.UUID) {
@@ -106,7 +106,7 @@ func TestCancelTaskCancelsTaskBeforeShards(t *testing.T) {
 		Status:        model.TaskStatusRunning,
 		ShardCount:    1,
 	})
-	mustCreateTaskShardWithID(t, ctx, db, shardID, taskID, 0, model.ShardStatusRunning)
+	mustCreateTaskShardWithID(t, ctx, db, shardID, taskID, model.ShardStatusRunning)
 
 	hookCalled := false
 	cancelTaskBeforeShardCancelHook = func(tx *gorm.DB, gotTaskID uuid.UUID) {
@@ -186,7 +186,6 @@ func TestCancelTaskSetsFinishedAtAndClearsRuntimeFieldsForCancelledShards(t *tes
 	if err := db.WithContext(ctx).Create(&model.TaskShard{
 		BaseUUIDModel:   model.BaseUUIDModel{ID: shardID},
 		TaskID:          taskID,
-		ShardIndex:      0,
 		Status:          model.ShardStatusRunning,
 		AssignedAgentID: "agent-1",
 		StartedAt:       &startedAt,
@@ -242,7 +241,6 @@ func TestCancelTaskIgnoresCallerContextAfterCommit(t *testing.T) {
 	if err := db.WithContext(context.Background()).Create(&model.TaskShard{
 		BaseUUIDModel:   model.BaseUUIDModel{ID: shardID},
 		TaskID:          taskID,
-		ShardIndex:      0,
 		Status:          model.ShardStatusRunning,
 		AssignedAgentID: "agent-1",
 	}).Error; err != nil {

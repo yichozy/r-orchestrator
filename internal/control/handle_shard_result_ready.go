@@ -16,29 +16,37 @@ func (server *Server) HandleShardResultReady(sess *agentSession, shard_ready *co
 	if err != nil {
 		return status.Errorf(codes.InvalidArgument, "invalid shard_id: %v", err)
 	}
-	shardIDStr := shardID.String()
 	if err := task_service.ValidateShardReport(sess.Context(), shardID, sess.agentID, sess.tenantID, sess.backend, model.ShardStatusRunning, "mark shard result ready"); err != nil {
 		return err
 	}
+
+	// Agent uploaded output to OSS. Record OSS key and mark shard SUCCEEDED.
 	if err := task_service.ReportShardStatus(sess.Context(), task_service.ReportShardStatusParams{
-		ShardID:     shardID,
-		ShardStatus: model.ShardStatusResultReady,
+		ShardID:      shardID,
+		ShardStatus:  model.ShardStatusSucceeded,
+		OutputOSSKey: shard_ready.GetOutputOssKey(),
+		OutputSHA256: shard_ready.GetSha256(),
 	}); err != nil {
-		return status.Errorf(codes.Internal, "mark shard result ready: %v", err)
+		return status.Errorf(codes.Internal, "mark shard succeeded: %v", err)
+	}
+
+	server.logger.Info("shard succeeded",
+		zap.String("agent_id", sess.agentID),
+		zap.Stringer("shard_id", shardID),
+		zap.String("output_oss_key", shard_ready.GetOutputOssKey()),
+	)
+
+	// Send ack and reset agent.
+	if err := sess.Send(&controlv1.ServerMessage{Payload: &controlv1.ServerMessage_ShardResultStored{ShardResultStored: &controlv1.ShardResultStored{ShardId: shardID.String()}}}); err != nil {
+		return err
 	}
 	if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
 		AgentID:        sess.agentID,
-		Status:         agent_service.AgentStatusResultReady,
-		CurrentShardID: &shardIDStr,
+		Status:         agent_service.AgentStatusIdle,
+		CurrentShardID: nil,
 	}); err != nil {
-		return status.Errorf(codes.Internal, "update agent result-ready state: %v", err)
+		return status.Errorf(codes.Internal, "reset agent idle: %v", err)
 	}
-	server.logger.Info("shard result ready",
-		zap.String("agent_id", sess.agentID),
-		zap.Stringer("shard_id", shardID),
-	)
-	if err := sess.Send(&controlv1.ServerMessage{Payload: &controlv1.ServerMessage_FetchShardResult{FetchShardResult: &controlv1.FetchShardResult{ShardId: shardID.String()}}}); err != nil {
-		return err
-	}
-	return nil
+
+	return server.TryAssignShard(sess)
 }

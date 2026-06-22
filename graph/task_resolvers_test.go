@@ -21,47 +21,6 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestQueryResolverGetTaskResultCSVMapsFields(t *testing.T) {
-	ctx := context.Background()
-	db := setupGraphResolverTestDB(t)
-
-	tenantID := uuid.New()
-	taskID := uuid.New()
-	artifactID := uuid.New()
-	mustCreateGraphTenant(t, ctx, db, tenantID, "team-alpha")
-	mustCreateGraphTask(t, ctx, db, imodel.Task{
-		BaseUUIDModel:    imodel.BaseUUIDModel{ID: taskID},
-		TenantID:         tenantID,
-		Status:           imodel.TaskStatusSucceeded,
-		ResultArtifactID: &artifactID,
-		ShardCount:       1,
-	})
-	mustCreateGraphArtifact(t, ctx, db, imodel.Artifact{
-		BaseUUIDModel: imodel.BaseUUIDModel{ID: artifactID},
-		TenantID:      tenantID,
-		TaskID:        taskID,
-		ArtifactType:  imodel.ArtifactTypeTaskOutput,
-		ContentBytes:  []byte("id,value\n1,a\n"),
-		ContentSize:   int64(len("id,value\n1,a\n")),
-		SHA256:        "sha",
-	})
-
-	got, err := (&queryResolver{&Resolver{}}).GetTaskResultCSV(ctx, "team-alpha", taskID)
-	if err != nil {
-		t.Fatalf("GetTaskResultCSV() error = %v", err)
-	}
-
-	want := &gqlmodel.TaskResultCSV{
-		TaskID:      taskID,
-		Filename:    fmt.Sprintf("task-%s-result.csv", taskID),
-		ContentType: "text/csv; charset=utf-8",
-		CSVContent:  "id,value\n1,a\n",
-	}
-	if *got != *want {
-		t.Fatalf("GetTaskResultCSV() = %#v, want %#v", got, want)
-	}
-}
-
 func TestQueryResolverGetTaskByIDPropagatesTaskNotFound(t *testing.T) {
 	ctx := context.Background()
 	db := setupGraphResolverTestDB(t)
@@ -168,47 +127,6 @@ func TestMutationResolverCancelTaskUsesTenantNamePath(t *testing.T) {
 	}
 }
 
-func TestMutationResolverSubmitTaskUsesTenantNamePath(t *testing.T) {
-	ctx := context.Background()
-	db := setupGraphResolverTestDB(t)
-
-	tenantID := uuid.New()
-	if err := db.WithContext(ctx).Create(&imodel.Tenant{
-		BaseUUIDModel:      imodel.BaseUUIDModel{ID: tenantID},
-		Name:               "team-alpha",
-		PrimaryBackendName: "ray",
-		MaxAgents:          2,
-	}).Error; err != nil {
-		t.Fatalf("create tenant: %v", err)
-	}
-
-	got, err := (&mutationResolver{&Resolver{}}).SubmitTask(ctx, gqlmodel.SubmitTaskInput{
-		TenantName:        "team-alpha",
-		RZipFile:          newGraphUpload("bundle.zip", []byte("fake-zip-bytes"), "application/zip"),
-		ParametersCSVFile: newGraphUpload("params.csv", []byte("id,value\n1,a\n2,b\n"), "text/csv"),
-	})
-	if err != nil {
-		t.Fatalf("SubmitTask() error = %v", err)
-	}
-	if got.TaskID == uuid.Nil {
-		t.Fatal("SubmitTask().TaskID = uuid.Nil, want generated task ID")
-	}
-
-	var task imodel.Task
-	if err := db.WithContext(ctx).First(&task, "id = ?", got.TaskID).Error; err != nil {
-		t.Fatalf("query submitted task: %v", err)
-	}
-	if task.TenantID != tenantID {
-		t.Fatalf("stored task.TenantID = %s, want %s", task.TenantID, tenantID)
-	}
-	if task.Status != imodel.TaskStatusPending {
-		t.Fatalf("stored task.Status = %q, want %q", task.Status, imodel.TaskStatusPending)
-	}
-	if task.ShardCount != 2 {
-		t.Fatalf("stored task.ShardCount = %d, want %d", task.ShardCount, 2)
-	}
-}
-
 func TestCreateTenantStoresNormalizedName(t *testing.T) {
 	ctx := context.Background()
 	setupGraphResolverTestDB(t)
@@ -226,7 +144,7 @@ func TestCreateTenantStoresNormalizedName(t *testing.T) {
 	}
 }
 
-func TestTaskGraphQLSchemaRemovesTenantIDArgsAndFields(t *testing.T) {
+func TestTaskGraphQLSchemaHasExpectedQueriesAndTypes(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("runtime.Caller(0) failed")
@@ -242,10 +160,12 @@ func TestTaskGraphQLSchemaRemovesTenantIDArgsAndFields(t *testing.T) {
 	requiredSnippets := []string{
 		"GetTaskByID(tenant_name: String!, task_id: UUID!): Task!",
 		"GetTaskList(tenant_name: String!, status: String): [Task!]!",
-		"GetTaskResultCSV(tenant_name: String!, task_id: UUID!): TaskResultCSV!",
 		"CancelTask(tenant_name: String!, task_id: UUID!): CancelTaskPayload!",
 		"type Task {\n  id: UUID!\n  tenant_name: String!",
+		"scripts: [TaskScript!]!",
 		"input SubmitTaskInput {\n  tenant_name: String!",
+		"bundle_zip: Upload!",
+		"type TaskScript {",
 	}
 	for _, snippet := range requiredSnippets {
 		if !strings.Contains(schema, snippet) {
@@ -254,6 +174,12 @@ func TestTaskGraphQLSchemaRemovesTenantIDArgsAndFields(t *testing.T) {
 	}
 	if strings.Contains(schema, "tenant_id") {
 		t.Fatalf("task.graphqls = %q, want no tenant_id references", schema)
+	}
+	if strings.Contains(schema, "GetTaskResultCSV") {
+		t.Fatalf("task.graphqls still contains removed GetTaskResultCSV")
+	}
+	if strings.Contains(schema, "parameters_csv_file") {
+		t.Fatalf("task.graphqls still contains removed parameters_csv_file")
 	}
 }
 
@@ -299,14 +225,6 @@ func mustCreateGraphTask(t *testing.T, ctx context.Context, db *gorm.DB, task im
 
 	if err := db.WithContext(ctx).Create(&task).Error; err != nil {
 		t.Fatalf("create task: %v", err)
-	}
-}
-
-func mustCreateGraphArtifact(t *testing.T, ctx context.Context, db *gorm.DB, artifact imodel.Artifact) {
-	t.Helper()
-
-	if err := db.WithContext(ctx).Create(&artifact).Error; err != nil {
-		t.Fatalf("create artifact: %v", err)
 	}
 }
 

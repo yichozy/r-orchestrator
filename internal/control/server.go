@@ -119,12 +119,21 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 		zap.String("status", registered_agent.Status),
 	)
 
-	// If reconnection restored a RESULT_READY agent, fetch the result now.
-	// On reconnect we always send FetchShardResult regardless of shard DB status,
-	// so the agent can re-upload if needed.
+	// If reconnection restored a RESULT_READY agent, the agent already
+	// uploaded output to OSS. Reset to idle and try to assign next shard.
 	if registered_agent.Status == agent_service.AgentStatusResultReady && registered_agent.CurrentShardID != nil {
-		shardIDStr := *registered_agent.CurrentShardID
-		if err := sess.Send(&controlv1.ServerMessage{Payload: &controlv1.ServerMessage_FetchShardResult{FetchShardResult: &controlv1.FetchShardResult{ShardId: shardIDStr}}}); err != nil {
+		server.logger.Info("reconnected agent had pending result, marking idle",
+			zap.String("agent_id", agentID),
+			zap.String("current_shard_id", *registered_agent.CurrentShardID),
+		)
+		if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+			AgentID:        agentID,
+			Status:         agent_service.AgentStatusIdle,
+			CurrentShardID: nil,
+		}); err != nil {
+			return status.Errorf(codes.Internal, "reset reconnected agent: %v", err)
+		}
+		if err := server.TryAssignShard(sess); err != nil {
 			return err
 		}
 	}
@@ -185,17 +194,7 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 			continue
 		}
 
-		if shard_data := message.GetShardResultData(); shard_data != nil {
-			if err := server.HandleShardResultData(sess, shard_data); err != nil {
-				return err
-			}
-			continue
-		}
-
-		if shard_completed := message.GetShardCompleted(); shard_completed != nil {
-			return status.Error(codes.InvalidArgument, "ShardCompleted is deprecated; use ShardResultReady and ShardResultData")
-		}
-
+	
 		if shard_failed := message.GetShardFailed(); shard_failed != nil {
 			if err := server.HandleShardFailed(sess, shard_failed); err != nil {
 				return err

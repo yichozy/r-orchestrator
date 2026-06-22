@@ -28,8 +28,7 @@ type Query struct {
 
 type SubmitTaskInput struct {
 	TenantName        string         `json:"tenant_name"`
-	RZipFile          graphql.Upload `json:"r_zip_file"`
-	ParametersCSVFile graphql.Upload `json:"parameters_csv_file"`
+	BundleZip         graphql.Upload `json:"bundle_zip"`
 	CompletionHookURL *string        `json:"completion_hook_url,omitempty"`
 }
 
@@ -38,21 +37,27 @@ type SubmitTaskResponse struct {
 }
 
 type Task struct {
-	ID         uuid.UUID  `json:"id"`
-	TenantName string     `json:"tenant_name"`
-	Status     string     `json:"status"`
-	LastError  string     `json:"last_error"`
-	CreatedAt  time.Time  `json:"created_at"`
-	StartedAt  *time.Time `json:"started_at,omitempty"`
-	FinishedAt *time.Time `json:"finished_at,omitempty"`
-	ShardCount int        `json:"shard_count"`
+	ID         uuid.UUID     `json:"id"`
+	TenantName string        `json:"tenant_name"`
+	Status     string        `json:"status"`
+	LastError  string        `json:"last_error"`
+	CreatedAt  time.Time     `json:"created_at"`
+	StartedAt  *time.Time    `json:"started_at,omitempty"`
+	FinishedAt *time.Time    `json:"finished_at,omitempty"`
+	ShardCount int           `json:"shard_count"`
+	Scripts    []*TaskScript `json:"scripts"`
 }
 
-type TaskResultCSV struct {
-	TaskID      uuid.UUID `json:"task_id"`
-	Filename    string    `json:"filename"`
-	ContentType string    `json:"content_type"`
-	CSVContent  string    `json:"csv_content"`
+type TaskScript struct {
+	ScriptName   string     `json:"script_name"`
+	ShardIndex   int        `json:"shard_index"`
+	Status       string     `json:"status"`
+	OutputOssKey *string    `json:"output_oss_key,omitempty"`
+	OutputSize   *int       `json:"output_size,omitempty"`
+	OutputSha256 *string    `json:"output_sha256,omitempty"`
+	ErrorMessage *string    `json:"error_message,omitempty"`
+	StartedAt    *time.Time `json:"started_at,omitempty"`
+	FinishedAt   *time.Time `json:"finished_at,omitempty"`
 }
 
 type Tenant struct {

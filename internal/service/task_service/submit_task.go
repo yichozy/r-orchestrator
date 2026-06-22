@@ -1,12 +1,17 @@
 package task_service
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"fmt"
 	"net/url"
+	"path"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
+	aliyun "github.com/yichozy/hopebox/aliyun"
 	"github.com/yichozy/r-orchestrator/internal/model"
 	"github.com/yichozy/r-orchestrator/internal/orm"
 	"github.com/yichozy/r-orchestrator/internal/orm/artifact_orm"
@@ -45,67 +50,57 @@ func SubmitTask(ctx context.Context, params SubmitTaskParams) (uuid.UUID, error)
 		return uuid.Nil, fmt.Errorf("%w: %s", ErrTenantNotFound, params.TenantName)
 	}
 
-	shard_csv_rows, err := util.SplitCSVRows(params.CSVBytes, tenant.MaxAgents)
+	// Extract and validate zip contents.
+	scripts, err := extractScriptsFromZip(params.ZipBytes)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("split csv: %w", err)
+		return uuid.Nil, err
 	}
 
-	task_id, err := uuid.NewV7()
+	taskID, err := uuid.NewV7()
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("generate task id: %w", err)
 	}
-	bundle_artifact_id, err := uuid.NewV7()
+
+	// Upload bundle to OSS.
+	ossClient, err := aliyun.NewOss()
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("generate bundle artifact id: %w", err)
+		return uuid.Nil, fmt.Errorf("init oss: %w", err)
 	}
-	input_csv_artifact_id, err := uuid.NewV7()
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("generate input csv artifact id: %w", err)
+	bundleKey := fmt.Sprintf("tasks/%s/bundle.zip", taskID)
+	if err := ossClient.UploadBytes(ctx, bundleKey, params.ZipBytes); err != nil {
+		return uuid.Nil, fmt.Errorf("upload bundle to oss: %w", err)
 	}
 
+	bundleArtifactID := uuid.Must(uuid.NewV7())
 	task := model.Task{
-		BaseUUIDModel:      model.BaseUUIDModel{ID: task_id},
-		TenantID:           tenant.ID,
-		Status:             model.TaskStatusPending,
-		BundleArtifactID:   bundle_artifact_id,
-		InputCSVArtifactID: input_csv_artifact_id,
-		CompletionHookURL:  params.CompletionHookURL,
-		ShardCount:         len(shard_csv_rows),
+		BaseUUIDModel:    model.BaseUUIDModel{ID: taskID},
+		TenantID:         tenant.ID,
+		Status:           model.TaskStatusPending,
+		BundleArtifactID: bundleArtifactID,
+		CompletionHookURL: params.CompletionHookURL,
+		ShardCount:       len(scripts),
 	}
-	bundle_artifact := model.Artifact{
-		BaseUUIDModel: model.BaseUUIDModel{ID: bundle_artifact_id},
+	bundleArtifact := model.Artifact{
+		BaseUUIDModel: model.BaseUUIDModel{ID: bundleArtifactID},
 		TenantID:      tenant.ID,
-		TaskID:        task_id,
+		TaskID:        taskID,
 		ArtifactType:  model.ArtifactTypeBundle,
-		ContentBytes:  append([]byte(nil), params.ZipBytes...),
-		ContentSize:   int64(len(params.ZipBytes)),
+		ContentSize:    int64(len(params.ZipBytes)),
 		SHA256:        util.SumSHA256(params.ZipBytes),
-	}
-	input_artifact := model.Artifact{
-		BaseUUIDModel: model.BaseUUIDModel{ID: input_csv_artifact_id},
-		TenantID:      tenant.ID,
-		TaskID:        task_id,
-		ArtifactType:  model.ArtifactTypeInputCSV,
-		ContentBytes:  append([]byte(nil), params.CSVBytes...),
-		ContentSize:   int64(len(params.CSVBytes)),
-		SHA256:        util.SumSHA256(params.CSVBytes),
 	}
 
 	err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := task_orm.Create(ctx, tx, task); err != nil {
 			return err
 		}
-		if err := artifact_orm.Create(ctx, tx, bundle_artifact); err != nil {
-			return err
-		}
-		if err := artifact_orm.Create(ctx, tx, input_artifact); err != nil {
+		if err := artifact_orm.Create(ctx, tx, bundleArtifact); err != nil {
 			return err
 		}
 
-		for shard_index := range shard_csv_rows {
+		for _, scriptName := range scripts {
 			if err := task_shard_orm.Create(ctx, tx, model.TaskShard{
-				TaskID:     task_id,
-				ShardIndex: shard_index,
+				TaskID:     taskID,
+				ScriptName: scriptName,
 				Status:     model.ShardStatusQueued,
 			}); err != nil {
 				return err
@@ -118,5 +113,43 @@ func SubmitTask(ctx context.Context, params SubmitTaskParams) (uuid.UUID, error)
 		return uuid.Nil, err
 	}
 
-	return task_id, nil
+	return taskID, nil
+}
+
+// extractScriptsFromZip opens the zip and extracts script names from cmd/*.sh.
+// Also validates that install.sh exists at the root.
+func extractScriptsFromZip(zipBytes []byte) ([]string, error) {
+	reader, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
+	if err != nil {
+		return nil, fmt.Errorf("invalid zip: %w", err)
+	}
+
+	var hasInstall bool
+	var scripts []string
+
+	for _, f := range reader.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+
+		switch path.Clean(f.Name) {
+		case "install.sh":
+			hasInstall = true
+		}
+
+		dir, name := path.Split(f.Name)
+		if path.Clean(dir) == "cmd" && strings.HasSuffix(name, ".sh") {
+			scripts = append(scripts, name)
+		}
+	}
+
+	if !hasInstall {
+		return nil, fmt.Errorf("bundle must contain install.sh at root")
+	}
+	if len(scripts) == 0 {
+		return nil, fmt.Errorf("bundle must contain at least one .sh script in cmd/ directory")
+	}
+
+	sort.Strings(scripts)
+	return scripts, nil
 }

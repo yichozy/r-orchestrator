@@ -92,8 +92,7 @@ func (server *Server) resolveAgentShardState(ctx context.Context, agent agent_se
 			return agent, nil
 		}
 		if shard.Status == model.ShardStatusSucceeded {
-			hasOutput, err := task_service.IsShardResultStored(ctx, shard.TaskID, shard.ShardIndex)
-			if err == nil && hasOutput {
+			if shard.OutputOSSKey != "" {
 				return agent, nil
 			}
 		}

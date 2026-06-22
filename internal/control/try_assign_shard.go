@@ -2,6 +2,7 @@ package control
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/yichozy/r-orchestrator/internal/service/agent_service"
@@ -56,12 +57,12 @@ func (server *Server) TryAssignShard(sess *agentSession) (ret_err error) {
 	if err := sess.Send(&controlv1.ServerMessage{
 		Payload: &controlv1.ServerMessage_AssignShard{
 			AssignShard: &controlv1.AssignShard{
-				ShardId:            shard.ID.String(),
-				TaskId:             task.ID.String(),
-				BundleArtifactId:   task.BundleArtifactID.String(),
-				InputCsvArtifactId: task.InputCSVArtifactID.String(),
-				ShardIndex:         int32(shard.ShardIndex),
-				TotalShards:        int32(task.ShardCount),
+				ShardId:          shard.ID.String(),
+				TaskId:           task.ID.String(),
+				ScriptName:       shard.ScriptName,
+				BundleOssKey:     fmt.Sprintf("tasks/%s/bundle.zip", task.ID),
+				OutputOssPrefix:  fmt.Sprintf("tasks/%s/shards/%s/", task.ID, shard.ScriptName),
+				TotalShards:      int32(task.ShardCount),
 			},
 		},
 	}); err != nil {

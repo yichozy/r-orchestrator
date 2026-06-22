@@ -15,6 +15,7 @@ import (
 	"github.com/yichozy/r-orchestrator/graph/generated"
 	"github.com/yichozy/r-orchestrator/graph/model"
 	imodel "github.com/yichozy/r-orchestrator/internal/model"
+	"github.com/yichozy/r-orchestrator/internal/orm"
 	"github.com/yichozy/r-orchestrator/internal/service/task_service"
 )
 
@@ -24,19 +25,12 @@ func (r *mutationResolver) SubmitTask(ctx context.Context, input model.SubmitTas
 		return nil, fmt.Errorf("tenant name is required")
 	}
 
-	zip_bytes, err := io.ReadAll(input.RZipFile.File)
+	zipBytes, err := io.ReadAll(input.BundleZip.File)
 	if err != nil {
 		return nil, err
 	}
-	if len(zip_bytes) == 0 {
-		return nil, fmt.Errorf("zip is required")
-	}
-	csv_bytes, err := io.ReadAll(input.ParametersCSVFile.File)
-	if err != nil {
-		return nil, err
-	}
-	if len(csv_bytes) == 0 {
-		return nil, fmt.Errorf("csv is required")
+	if len(zipBytes) == 0 {
+		return nil, fmt.Errorf("bundle zip is required")
 	}
 
 	completionHookURL := ""
@@ -44,10 +38,9 @@ func (r *mutationResolver) SubmitTask(ctx context.Context, input model.SubmitTas
 		completionHookURL = *input.CompletionHookURL
 	}
 
-	task_id, err := task_service.SubmitTask(ctx, task_service.SubmitTaskParams{
+	taskID, err := task_service.SubmitTask(ctx, task_service.SubmitTaskParams{
 		TenantName:        input.TenantName,
-		ZipBytes:          zip_bytes,
-		CSVBytes:          csv_bytes,
+		ZipBytes:          zipBytes,
 		CompletionHookURL: completionHookURL,
 	})
 	if err != nil {
@@ -55,7 +48,7 @@ func (r *mutationResolver) SubmitTask(ctx context.Context, input model.SubmitTas
 	}
 
 	return &model.SubmitTaskResponse{
-		TaskID: task_id,
+		TaskID: taskID,
 	}, nil
 }
 
@@ -119,19 +112,34 @@ func (r *queryResolver) GetTaskList(ctx context.Context, tenantName string, stat
 	return result, nil
 }
 
-// GetTaskResultCSV is the resolver for the GetTaskResultCSV field.
-func (r *queryResolver) GetTaskResultCSV(ctx context.Context, tenantName string, taskID uuid.UUID) (*model.TaskResultCSV, error) {
-	result, err := task_service.GetTaskResultCSV(ctx, tenantName, taskID)
+// Scripts is the resolver for the scripts field.
+func (r *taskResolver) Scripts(ctx context.Context, obj *model.Task) ([]*model.TaskScript, error) {
+	db, err := orm.GetDB()
+	if err != nil {
+		return nil, err
+	}
+	scripts, err := task_service.GetTaskScripts(ctx, db, obj.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	return &model.TaskResultCSV{
-		TaskID:      result.TaskID,
-		Filename:    result.Filename,
-		ContentType: result.ContentType,
-		CSVContent:  result.CSVContent,
-	}, nil
+	result := make([]*model.TaskScript, len(scripts))
+	for i, s := range scripts {
+			result[i] = &model.TaskScript{
+			ScriptName:    s.ScriptName,
+			Status:        s.Status,
+		}
+		if s.OutputOSSKey != "" {
+			result[i].OutputOssKey = &s.OutputOSSKey
+			result[i].OutputSha256 = &s.OutputSHA256
+		}
+		if s.ErrorMessage != "" {
+			result[i].ErrorMessage = &s.ErrorMessage
+		}
+		result[i].StartedAt = s.StartedAt
+		result[i].FinishedAt = s.FinishedAt
+	}
+	return result, nil
 }
 
 // Mutation returns generated.MutationResolver implementation.
@@ -142,3 +150,4 @@ func (r *Resolver) Query() generated.QueryResolver { return &queryResolver{r} }
 
 type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
+type taskResolver struct{ *Resolver }

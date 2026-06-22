@@ -21,7 +21,6 @@ type Task struct {
 	TenantID           uuid.UUID  `gorm:"column:tenant_id;not null;type:uuid"`
 	Status             string     `gorm:"column:status;not null"`
 	BundleArtifactID   uuid.UUID  `gorm:"column:bundle_artifact_id;type:uuid"`
-	InputCSVArtifactID uuid.UUID  `gorm:"column:input_csv_artifact_id;type:uuid"`
 	ResultArtifactID   *uuid.UUID `gorm:"column:result_artifact_id;type:uuid"`
 	CompletionHookURL  string     `gorm:"column:completion_hook_url;not null;default:''"`
 	ShardCount         int        `gorm:"column:shard_count;not null;default:0"`
