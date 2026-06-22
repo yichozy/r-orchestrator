@@ -25,6 +25,10 @@ impl OSSConfig {
     }
 
     fn sign_url(&self, method: &str, key: &str, expires_in_secs: u64) -> String {
+        let endpoint = self.endpoint
+            .trim_start_matches("http://")
+            .trim_start_matches("https://")
+            .trim_end_matches('/');
         let expires = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -43,7 +47,7 @@ impl OSSConfig {
         format!(
             "https://{}.{}/{}?OSSAccessKeyId={}&Signature={}&Expires={}",
             self.bucket,
-            self.endpoint,
+            endpoint,
             key,
             percent_encode(&self.access_key_id),
             percent_encode(&signature),

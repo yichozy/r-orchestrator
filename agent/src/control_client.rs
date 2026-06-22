@@ -182,10 +182,21 @@ pub async fn run_callback_loop(
                             let exec_pending_result = pending_result.clone();
                             let exec_cancel_tokens = cancel_tokens.clone();
 
+                            // Send ShardStarted immediately so the shard
+                            // transitions to RUNNING before we attempt execution.
+                            let _ = tx
+                                .send(controlv1::AgentMessage {
+                                    payload: Some(controlv1::agent_message::Payload::ShardStarted(
+                                        controlv1::ShardStarted {
+                                            shard_id: assign.shard_id.clone(),
+                                        },
+                                    )),
+                                })
+                                .await;
+
                             tokio::spawn(async move {
                                 let result = crate::executor::execute_shard(
                                     &exec_oss_config,
-                                    &exec_tx,
                                     &exec_shard_id,
                                     &exec_script_name,
                                     &exec_bundle_oss_key,

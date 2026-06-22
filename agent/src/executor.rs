@@ -1,4 +1,3 @@
-use crate::control_client::controlv1;
 use crate::oss;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
@@ -44,7 +43,6 @@ pub fn cache_dir() -> PathBuf {
 
 pub async fn execute_shard(
     oss_config: &oss::OSSConfig,
-    tx: &tokio::sync::mpsc::Sender<controlv1::AgentMessage>,
     shard_id: &str,
     script_name: &str,
     bundle_oss_key: &str,
@@ -67,18 +65,7 @@ pub async fn execute_shard(
     extract_zip(&bundle_path, &work_dir)?;
     tracing::info!(path = %work_dir.display(), "extracted bundle");
 
-    // Phase 3: Send ShardStarted
-    let _ = tx
-        .send(controlv1::AgentMessage {
-            payload: Some(controlv1::agent_message::Payload::ShardStarted(
-                controlv1::ShardStarted {
-                    shard_id: shard_id.to_string(),
-                },
-            )),
-        })
-        .await;
-
-    // Phase 4: Run install.sh
+    // Phase 3: Run install.sh
     let install_sh = work_dir.join("install.sh");
     if install_sh.exists() {
         if cancel_token.is_cancelled() {
