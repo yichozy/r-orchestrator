@@ -40,7 +40,13 @@ func LoadValidatedShard(
 		return model.TaskShard{}, status.Errorf(codes.Internal, "load shard %s: %v", shardID, err)
 	}
 	if shard.AssignedAgentID != agentID {
-		return model.TaskShard{}, status.Errorf(codes.PermissionDenied, "shard %s is assigned to agent %s, not %s", shardID, shard.AssignedAgentID, agentID)
+		// Terminal shards (cancelled/failed/succeeded by the server) have
+		// assigned_agent_id cleared — skip ownership check.
+		switch shard.Status {
+		case model.ShardStatusCancelled, model.ShardStatusFailed, model.ShardStatusSucceeded:
+		default:
+			return model.TaskShard{}, status.Errorf(codes.PermissionDenied, "shard %s is assigned to agent %s, not %s", shardID, shard.AssignedAgentID, agentID)
+		}
 	}
 
 	owner, err := task_shard_orm.GetShardTaskOwner(ctx, db, shard.TaskID)
