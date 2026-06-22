@@ -8,7 +8,6 @@ pub struct Config {
     pub reconnect_initial_backoff_secs: u64,
     pub reconnect_max_backoff_secs: u64,
     pub health_port: u16,
-    pub parallelism: usize,
 }
 
 impl Config {
@@ -48,12 +47,6 @@ impl Config {
             .and_then(|v| v.parse::<u16>().ok())
             .unwrap_or(9091);
 
-        let parallelism: usize = std::env::var("AGENT_PARALLELISM")
-            .ok()
-            .and_then(|v| v.parse::<usize>().ok())
-            .filter(|v| *v > 0)
-            .unwrap_or(1);
-
         Self {
             server_grpc_addr,
             agent_token,
@@ -64,7 +57,6 @@ impl Config {
             reconnect_initial_backoff_secs,
             reconnect_max_backoff_secs,
             health_port,
-            parallelism,
         }
     }
 }

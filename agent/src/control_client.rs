@@ -58,13 +58,12 @@ pub async fn connect(
 
 pub async fn run_callback_loop(
     mut client: controlv1::control_service_client::ControlServiceClient<Channel>,
-    fetch_client: controlv1::control_service_client::ControlServiceClient<Channel>,
+    oss_config: crate::oss::OSSConfig,
     agent_id: String,
     tenant_id: String,
     backend_name: String,
     token: String,
     heartbeat_interval_secs: u64,
-    parallelism: usize,
     pending_result: Arc<Mutex<crate::pending_result::PendingResultState>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (tx, rx) = mpsc::channel::<controlv1::AgentMessage>(32);
@@ -144,7 +143,7 @@ pub async fn run_callback_loop(
                                 let pending = pending_result.lock().await;
                                 pending.try_take_assignment(&assign.shard_id)?;
                             }
-                            tracing::info!(shard_id = %assign.shard_id, task_id = %assign.task_id, "shard assigned");
+                            tracing::info!(shard_id = %assign.shard_id, task_id = %assign.task_id, script_name = %assign.script_name, "shard assigned");
                             {
                                 let mut s = status.lock().await;
                                 if !s.1.is_empty() {
@@ -174,32 +173,24 @@ pub async fn run_callback_loop(
                             .await?;
 
                             let exec_tx = tx.clone();
-                            let exec_agent_id = agent_id.clone();
-                            let exec_token = token.clone();
                             let exec_shard_id = assign.shard_id.clone();
-                            let exec_bundle_artifact_id = assign.bundle_artifact_id.clone();
-                            let exec_input_csv_artifact_id = assign.input_csv_artifact_id.clone();
-                            let exec_shard_index = assign.shard_index;
-                            let exec_total_shards = assign.total_shards;
-                            let exec_fetch_client = fetch_client.clone();
+                            let exec_script_name = assign.script_name.clone();
+                            let exec_bundle_oss_key = assign.bundle_oss_key.clone();
+                            let exec_output_oss_prefix = assign.output_oss_prefix.clone();
+                            let exec_oss_config = oss_config.clone();
                             let exec_status = status.clone();
                             let exec_pending_result = pending_result.clone();
                             let exec_cancel_tokens = cancel_tokens.clone();
 
                             tokio::spawn(async move {
-                                let mut exec_client = exec_fetch_client;
                                 let result = crate::executor::execute_shard(
-                                    &mut exec_client,
+                                    &exec_oss_config,
                                     &exec_tx,
-                                    &exec_agent_id,
-                                    &exec_token,
                                     &exec_shard_id,
-                                    &exec_bundle_artifact_id,
-                                    &exec_input_csv_artifact_id,
-                                    exec_shard_index,
-                                    exec_total_shards,
+                                    &exec_script_name,
+                                    &exec_bundle_oss_key,
+                                    &exec_output_oss_prefix,
                                     &cancel_token,
-                                    parallelism,
                                 )
                                 .await;
 
@@ -253,11 +244,10 @@ pub async fn run_callback_loop(
                                         )
                                         .await;
                                     }
-                                    Ok(crate::executor::ExecutionOutcome::ResultReady { shard_id, output_csv, sha256 }) => {
-                                        let ready_output_size = output_csv.len() as i64;
+                                    Ok(crate::executor::ExecutionOutcome::ResultReady { shard_id, output_oss_key, sha256 }) => {
                                         let set_ready_result = {
                                             let mut pending = exec_pending_result.lock().await;
-                                            pending.set_ready(shard_id.clone(), output_csv)
+                                            pending.set_ready(shard_id.clone())
                                         };
                                         if let Err(err) = set_ready_result {
                                             tracing::error!(shard_id = %exec_shard_id, error = %err, "failed to store pending result");
@@ -297,7 +287,7 @@ pub async fn run_callback_loop(
                                                     controlv1::agent_message::Payload::ShardResultReady(
                                                         controlv1::ShardResultReady {
                                                             shard_id,
-                                                            output_size: ready_output_size,
+                                                            output_oss_key,
                                                             sha256,
                                                         },
                                                     ),
@@ -322,16 +312,6 @@ pub async fn run_callback_loop(
                         controlv1::server_message::Payload::Shutdown(_) => {
                             tracing::info!("received shutdown signal from server");
                             return Ok(());
-                        }
-                        controlv1::server_message::Payload::FetchShardResult(fetch) => {
-                            tracing::info!(shard_id = %fetch.shard_id, "server requested pending shard result");
-                            let payload = {
-                                let pending = pending_result.lock().await;
-                                pending.to_result_data(&fetch.shard_id)?
-                            };
-                            tx.send(controlv1::AgentMessage {
-                                payload: Some(controlv1::agent_message::Payload::ShardResultData(payload)),
-                            }).await?;
                         }
                         controlv1::server_message::Payload::ShardResultStored(stored) => {
                             tracing::info!(shard_id = %stored.shard_id, "server acknowledged stored shard result");

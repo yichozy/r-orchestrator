@@ -1,9 +1,9 @@
-mod artifacts;
 mod config;
 mod control_client;
 #[cfg(test)]
 mod control_client_result_ready_tests;
 mod executor;
+mod oss;
 mod pending_result;
 mod tests;
 
@@ -81,19 +81,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Ok(client) => {
                 tracing::info!(server_addr = %cfg.server_grpc_addr, "connected to server");
 
-                // Create a separate client for FetchArtifact RPCs
-                let fetch_client = control_client::connect(&cfg.server_grpc_addr).await?;
+                let oss_config = oss::OSSConfig::from_env();
 
                 backoff_secs = cfg.reconnect_initial_backoff_secs.max(1);
                 let result = control_client::run_callback_loop(
                     client,
-                    fetch_client,
+                    oss_config,
                     cfg.agent_id.clone(),
                     cfg.tenant_id.clone(),
                     cfg.backend_name.clone(),
                     cfg.agent_token.clone(),
                     cfg.heartbeat_interval_secs,
-                    cfg.parallelism,
                     pending_result.clone(),
                 )
                 .await;
