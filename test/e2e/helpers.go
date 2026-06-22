@@ -59,8 +59,6 @@ func cleanupTestTenant(t *testing.T, tenantID uuid.UUID) {
 		return
 	}
 
-	// Delete artifacts first (foreign key dependency).
-	db.WithContext(testCtx).Where("tenant_id = ?", tenantID).Delete(&model.Artifact{})
 	// Delete shards.
 	var taskIDs []uuid.UUID
 	db.WithContext(testCtx).Model(&model.Task{}).Where("tenant_id = ?", tenantID).Pluck("id", &taskIDs)

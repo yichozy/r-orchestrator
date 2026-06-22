@@ -14,11 +14,9 @@ import (
 	aliyun "github.com/yichozy/hopebox/aliyun"
 	"github.com/yichozy/r-orchestrator/internal/model"
 	"github.com/yichozy/r-orchestrator/internal/orm"
-	"github.com/yichozy/r-orchestrator/internal/orm/artifact_orm"
 	"github.com/yichozy/r-orchestrator/internal/orm/task_orm"
 	"github.com/yichozy/r-orchestrator/internal/orm/task_shard_orm"
 	"github.com/yichozy/r-orchestrator/internal/orm/tenant_orm"
-	"github.com/yichozy/r-orchestrator/internal/util"
 	"gorm.io/gorm"
 )
 
@@ -66,34 +64,21 @@ func SubmitTask(ctx context.Context, params SubmitTaskParams) (uuid.UUID, error)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("init oss: %w", err)
 	}
-	bundleKey := fmt.Sprintf("tasks/%s/bundle.zip", taskID)
+	bundleKey := fmt.Sprintf("r-orchestrator/tasks/%s/bundle.zip", taskID)
 	if err := ossClient.UploadBytes(ctx, bundleKey, params.ZipBytes); err != nil {
 		return uuid.Nil, fmt.Errorf("upload bundle to oss: %w", err)
 	}
 
-	bundleArtifactID := uuid.Must(uuid.NewV7())
 	task := model.Task{
 		BaseUUIDModel:    model.BaseUUIDModel{ID: taskID},
 		TenantID:         tenant.ID,
 		Status:           model.TaskStatusPending,
-		BundleArtifactID: bundleArtifactID,
 		CompletionHookURL: params.CompletionHookURL,
 		ShardCount:       len(scripts),
-	}
-	bundleArtifact := model.Artifact{
-		BaseUUIDModel: model.BaseUUIDModel{ID: bundleArtifactID},
-		TenantID:      tenant.ID,
-		TaskID:        taskID,
-		ArtifactType:  model.ArtifactTypeBundle,
-		ContentSize:    int64(len(params.ZipBytes)),
-		SHA256:        util.SumSHA256(params.ZipBytes),
 	}
 
 	err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := task_orm.Create(ctx, tx, task); err != nil {
-			return err
-		}
-		if err := artifact_orm.Create(ctx, tx, bundleArtifact); err != nil {
 			return err
 		}
 

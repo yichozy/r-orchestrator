@@ -4,8 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/yichozy/r-orchestrator/internal/model"
-	"gorm.io/driver/sqlite"
+		"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -27,9 +26,7 @@ func open_test_db(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}
-	if err := db.AutoMigrate(&model.Artifact{}); err != nil {
-		t.Fatalf("auto migrate artifact: %v", err)
-	}
+	
 
 	return db
 }

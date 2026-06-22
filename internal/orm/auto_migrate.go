@@ -16,7 +16,6 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
 		&model.Tenant{},
 		&model.Task{},
-		&model.Artifact{},
 		&model.TaskShard{},
 		&model.Cluster{},
 	); err != nil {

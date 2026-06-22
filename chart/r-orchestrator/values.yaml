@@ -39,7 +39,7 @@ cluster:
   agentToken: ""
   agentImage: ""
   agentLogLevel: "info"
-  agentParallelism: "1"
+  agentParallelism: "2"
   kubernetes:
     enabled: true
     namespace: r-agents
