@@ -37,7 +37,7 @@ func LeaseNextShard(ctx context.Context, tenantID uuid.UUID, backendName string,
 				Where("tenants.primary_backend_name = ?", backendName).
 				Where("task_shards.status = ?", model.ShardStatusQueued).
 				Order("tasks.created_at asc").
-				Order("task_shards.shard_index asc").
+				Order("task_shards.script_name asc").
 				Take(&shard).Error; err != nil {
 				return err
 			}

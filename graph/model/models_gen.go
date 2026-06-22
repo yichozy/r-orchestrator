@@ -50,10 +50,8 @@ type Task struct {
 
 type TaskScript struct {
 	ScriptName   string     `json:"script_name"`
-	ShardIndex   int        `json:"shard_index"`
 	Status       string     `json:"status"`
 	OutputOssKey *string    `json:"output_oss_key,omitempty"`
-	OutputSize   *int       `json:"output_size,omitempty"`
 	OutputSha256 *string    `json:"output_sha256,omitempty"`
 	ErrorMessage *string    `json:"error_message,omitempty"`
 	StartedAt    *time.Time `json:"started_at,omitempty"`

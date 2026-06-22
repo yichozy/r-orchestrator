@@ -75,9 +75,7 @@ type ComplexityRoot struct {
 		FinishedAt   func(childComplexity int) int
 		OutputOssKey func(childComplexity int) int
 		OutputSha256 func(childComplexity int) int
-		OutputSize   func(childComplexity int) int
 		ScriptName   func(childComplexity int) int
-		ShardIndex   func(childComplexity int) int
 		StartedAt    func(childComplexity int) int
 		Status       func(childComplexity int) int
 	}
@@ -270,24 +268,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.TaskScript.OutputSha256(childComplexity), true
-	case "TaskScript.output_size":
-		if e.ComplexityRoot.TaskScript.OutputSize == nil {
-			break
-		}
-
-		return e.ComplexityRoot.TaskScript.OutputSize(childComplexity), true
 	case "TaskScript.script_name":
 		if e.ComplexityRoot.TaskScript.ScriptName == nil {
 			break
 		}
 
 		return e.ComplexityRoot.TaskScript.ScriptName(childComplexity), true
-	case "TaskScript.shard_index":
-		if e.ComplexityRoot.TaskScript.ShardIndex == nil {
-			break
-		}
-
-		return e.ComplexityRoot.TaskScript.ShardIndex(childComplexity), true
 	case "TaskScript.started_at":
 		if e.ComplexityRoot.TaskScript.StartedAt == nil {
 			break
@@ -426,10 +412,8 @@ type Mutation {
 
 type TaskScript {
   script_name: String!
-  shard_index: Int!
   status: String!
   output_oss_key: String
-  output_size: Int
   output_sha256: String
   error_message: String
   started_at: Time
@@ -535,14 +519,10 @@ func (ec *executionContext) childFields_TaskScript(ctx context.Context, field gr
 	switch field.Name {
 	case "script_name":
 		return ec.fieldContext_TaskScript_script_name(ctx, field)
-	case "shard_index":
-		return ec.fieldContext_TaskScript_shard_index(ctx, field)
 	case "status":
 		return ec.fieldContext_TaskScript_status(ctx, field)
 	case "output_oss_key":
 		return ec.fieldContext_TaskScript_output_oss_key(ctx, field)
-	case "output_size":
-		return ec.fieldContext_TaskScript_output_size(ctx, field)
 	case "output_sha256":
 		return ec.fieldContext_TaskScript_output_sha256(ctx, field)
 	case "error_message":
@@ -1461,29 +1441,6 @@ func (ec *executionContext) fieldContext_TaskScript_script_name(_ context.Contex
 	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
-func (ec *executionContext) _TaskScript_shard_index(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_TaskScript_shard_index(ctx, field)
-		},
-		func(ctx context.Context) (any, error) {
-			return obj.ShardIndex, nil
-		},
-		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
-			return ec.marshalNInt2int(ctx, selections, v)
-		},
-		true,
-		true,
-	)
-}
-func (ec *executionContext) fieldContext_TaskScript_shard_index(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type Int does not have child fields"))
-}
-
 func (ec *executionContext) _TaskScript_status(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -1528,29 +1485,6 @@ func (ec *executionContext) _TaskScript_output_oss_key(ctx context.Context, fiel
 }
 func (ec *executionContext) fieldContext_TaskScript_output_oss_key(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type String does not have child fields"))
-}
-
-func (ec *executionContext) _TaskScript_output_size(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_TaskScript_output_size(ctx, field)
-		},
-		func(ctx context.Context) (any, error) {
-			return obj.OutputSize, nil
-		},
-		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v *int) graphql.Marshaler {
-			return ec.marshalOInt2ᚖint(ctx, selections, v)
-		},
-		true,
-		false,
-	)
-}
-func (ec *executionContext) fieldContext_TaskScript_output_size(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type Int does not have child fields"))
 }
 
 func (ec *executionContext) _TaskScript_output_sha256(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
@@ -3221,11 +3155,6 @@ func (ec *executionContext) _TaskScript(ctx context.Context, sel ast.SelectionSe
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "shard_index":
-			out.Values[i] = ec._TaskScript_shard_index(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "status":
 			out.Values[i] = ec._TaskScript_status(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -3233,8 +3162,6 @@ func (ec *executionContext) _TaskScript(ctx context.Context, sel ast.SelectionSe
 			}
 		case "output_oss_key":
 			out.Values[i] = ec._TaskScript_output_oss_key(ctx, field, obj)
-		case "output_size":
-			out.Values[i] = ec._TaskScript_output_size(ctx, field, obj)
 		case "output_sha256":
 			out.Values[i] = ec._TaskScript_output_sha256(ctx, field, obj)
 		case "error_message":
@@ -4020,24 +3947,6 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	_ = sel
 	_ = ctx
 	res := graphql.MarshalBoolean(*v)
-	return res
-}
-
-func (ec *executionContext) unmarshalOInt2ᚖint(ctx context.Context, v any) (*int, error) {
-	if v == nil {
-		return nil, nil
-	}
-	res, err := graphql.UnmarshalInt(v)
-	return &res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalOInt2ᚖint(ctx context.Context, sel ast.SelectionSet, v *int) graphql.Marshaler {
-	if v == nil {
-		return graphql.Null
-	}
-	_ = sel
-	_ = ctx
-	res := graphql.MarshalInt(*v)
 	return res
 }
 

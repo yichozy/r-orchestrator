@@ -440,8 +440,7 @@ type AssignShard struct {
 	ScriptName      string                 `protobuf:"bytes,3,opt,name=script_name,json=scriptName,proto3" json:"script_name,omitempty"`
 	BundleOssKey    string                 `protobuf:"bytes,4,opt,name=bundle_oss_key,json=bundleOssKey,proto3" json:"bundle_oss_key,omitempty"`
 	OutputOssPrefix string                 `protobuf:"bytes,5,opt,name=output_oss_prefix,json=outputOssPrefix,proto3" json:"output_oss_prefix,omitempty"`
-	ShardIndex      int32                  `protobuf:"varint,6,opt,name=shard_index,json=shardIndex,proto3" json:"shard_index,omitempty"`
-	TotalShards     int32                  `protobuf:"varint,7,opt,name=total_shards,json=totalShards,proto3" json:"total_shards,omitempty"`
+	TotalShards     int32                  `protobuf:"varint,6,opt,name=total_shards,json=totalShards,proto3" json:"total_shards,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -509,13 +508,6 @@ func (x *AssignShard) GetOutputOssPrefix() string {
 		return x.OutputOssPrefix
 	}
 	return ""
-}
-
-func (x *AssignShard) GetShardIndex() int32 {
-	if x != nil {
-		return x.ShardIndex
-	}
-	return 0
 }
 
 func (x *AssignShard) GetTotalShards() int32 {
@@ -785,8 +777,7 @@ type ShardResultReady struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ShardId       string                 `protobuf:"bytes,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
 	OutputOssKey  string                 `protobuf:"bytes,2,opt,name=output_oss_key,json=outputOssKey,proto3" json:"output_oss_key,omitempty"`
-	OutputSize    int64                  `protobuf:"varint,3,opt,name=output_size,json=outputSize,proto3" json:"output_size,omitempty"`
-	Sha256        string                 `protobuf:"bytes,4,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	Sha256        string                 `protobuf:"bytes,3,opt,name=sha256,proto3" json:"sha256,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -833,13 +824,6 @@ func (x *ShardResultReady) GetOutputOssKey() string {
 		return x.OutputOssKey
 	}
 	return ""
-}
-
-func (x *ShardResultReady) GetOutputSize() int64 {
-	if x != nil {
-		return x.OutputSize
-	}
-	return 0
 }
 
 func (x *ShardResultReady) GetSha256() string {
@@ -922,17 +906,15 @@ const file_proto_control_proto_rawDesc = "" +
 	"\tHeartbeat\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12(\n" +
-	"\x10current_shard_id\x18\x03 \x01(\tR\x0ecurrentShardId\"\xf8\x01\n" +
+	"\x10current_shard_id\x18\x03 \x01(\tR\x0ecurrentShardId\"\xd7\x01\n" +
 	"\vAssignShard\x12\x19\n" +
 	"\bshard_id\x18\x01 \x01(\tR\ashardId\x12\x17\n" +
 	"\atask_id\x18\x02 \x01(\tR\x06taskId\x12\x1f\n" +
 	"\vscript_name\x18\x03 \x01(\tR\n" +
 	"scriptName\x12$\n" +
 	"\x0ebundle_oss_key\x18\x04 \x01(\tR\fbundleOssKey\x12*\n" +
-	"\x11output_oss_prefix\x18\x05 \x01(\tR\x0foutputOssPrefix\x12\x1f\n" +
-	"\vshard_index\x18\x06 \x01(\x05R\n" +
-	"shardIndex\x12!\n" +
-	"\ftotal_shards\x18\a \x01(\x05R\vtotalShards\"\a\n" +
+	"\x11output_oss_prefix\x18\x05 \x01(\tR\x0foutputOssPrefix\x12!\n" +
+	"\ftotal_shards\x18\x06 \x01(\x05R\vtotalShards\"\a\n" +
 	"\x05Drain\"\n" +
 	"\n" +
 	"\bShutdown\"(\n" +
@@ -944,13 +926,11 @@ const file_proto_control_proto_rawDesc = "" +
 	"\bshard_id\x18\x01 \x01(\tR\ashardId\"M\n" +
 	"\vShardFailed\x12\x19\n" +
 	"\bshard_id\x18\x01 \x01(\tR\ashardId\x12#\n" +
-	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\x8c\x01\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"k\n" +
 	"\x10ShardResultReady\x12\x19\n" +
 	"\bshard_id\x18\x01 \x01(\tR\ashardId\x12$\n" +
-	"\x0eoutput_oss_key\x18\x02 \x01(\tR\foutputOssKey\x12\x1f\n" +
-	"\voutput_size\x18\x03 \x01(\x03R\n" +
-	"outputSize\x12\x16\n" +
-	"\x06sha256\x18\x04 \x01(\tR\x06sha256\".\n" +
+	"\x0eoutput_oss_key\x18\x02 \x01(\tR\foutputOssKey\x12\x16\n" +
+	"\x06sha256\x18\x03 \x01(\tR\x06sha256\".\n" +
 	"\x11ShardResultStored\x12\x19\n" +
 	"\bshard_id\x18\x01 \x01(\tR\ashardId2z\n" +
 	"\x0eControlService\x12h\n" +
