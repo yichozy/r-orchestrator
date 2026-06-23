@@ -88,7 +88,7 @@ func RollbackTimedOutShard(ctx context.Context, shardID uuid.UUID, agentID strin
 
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		return task_shard_orm.RollbackShardWithTask(ctx, tx, shardID, []string{
-			model.ShardStatusLeased, model.ShardStatusRunning, model.ShardStatusResultReady,
+			model.ShardStatusLeased, model.ShardStatusRunning,
 		}, task)
 	})
 }

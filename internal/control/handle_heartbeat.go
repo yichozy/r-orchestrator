@@ -3,8 +3,6 @@ package control
 import (
 	"errors"
 
-	"github.com/google/uuid"
-	"github.com/yichozy/r-orchestrator/internal/model"
 	"github.com/yichozy/r-orchestrator/internal/service/agent_service"
 	"github.com/yichozy/r-orchestrator/internal/service/task_service"
 	controlv1 "github.com/yichozy/r-orchestrator/proto"
@@ -53,45 +51,7 @@ func (server *Server) HandleHeartbeat(sess *agentSession, heartbeat *controlv1.H
 
 	agent_service.ResetHeartbeat(sess.agentID)
 
-	switch heartbeat.GetStatus() {
-	case agent_service.AgentStatusResultReady:
-		if shardID == nil || *shardID == "" {
-			return status.Error(codes.InvalidArgument, "result-ready heartbeat requires current_shard_id")
-		}
-		parsedShardID, parseErr := uuid.Parse(*shardID)
-		if parseErr != nil {
-			return status.Errorf(codes.InvalidArgument, "invalid shard_id in result-ready heartbeat: %v", parseErr)
-		}
-		shard, err := task_service.LoadValidatedShard(sess.Context(), parsedShardID, sess.agentID, sess.tenantID, sess.backend)
-		if err != nil {
-			code := status.Code(err)
-			if code == codes.NotFound || code == codes.PermissionDenied {
-				server.logger.Warn("result-ready heartbeat references invalid shard",
-					zap.Stringer("shard_id", parsedShardID),
-					zap.String("code", code.String()),
-					zap.Error(err),
-				)
-			} else {
-				return err
-			}
-		} else {
-			switch shard.Status {
-			case model.ShardStatusSucceeded:
-				// Result already stored, reset agent to idle and assign next.
-				if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
-					AgentID:        sess.agentID,
-					Status:         agent_service.AgentStatusIdle,
-					CurrentShardID: nil,
-				}); err != nil {
-					return status.Errorf(codes.Internal, "reset agent idle: %v", err)
-				}
-				return server.TryAssignShard(sess)
-			default:
-				// Agent still processing, wait for ShardResultReady message.
-			}
-		}
-
-	case agent_service.AgentStatusIdle:
+	if heartbeat.GetStatus() == agent_service.AgentStatusIdle {
 		if err := server.TryAssignShard(sess); err != nil {
 			return err
 		}

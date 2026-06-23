@@ -72,10 +72,8 @@ func defaultCurrentStatusesFor(status string) []string {
 	switch status {
 	case model.ShardStatusRunning:
 		return []string{model.ShardStatusLeased}
-	case model.ShardStatusResultReady:
-		return []string{model.ShardStatusRunning}
 	case model.ShardStatusSucceeded, model.ShardStatusFailed:
-		return []string{model.ShardStatusRunning, model.ShardStatusResultReady}
+		return []string{model.ShardStatusRunning}
 	default:
 		return nil
 	}

@@ -81,22 +81,3 @@ func ValidateShardReport(
 	}
 	return nil
 }
-
-// RestoreResultReadyShard finds a RESULT_READY shard assigned to the given agent.
-// Returns the shard ID if found, or nil (no error) if no such shard exists.
-func RestoreResultReadyShard(ctx context.Context, agentID string) (*uuid.UUID, error) {
-	db, err := orm.GetDB()
-	if err != nil {
-		return nil, err
-	}
-
-	shard, err := task_shard_orm.GetResultReadyTaskShardByAgent(ctx, db, agentID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	shardID := shard.ID
-	return &shardID, nil
-}

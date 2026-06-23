@@ -16,11 +16,11 @@ import (
 var reportShardStatusAfterTaskLockHook func(tx *gorm.DB, taskID, shardID uuid.UUID)
 
 type ReportShardStatusParams struct {
-	ShardID       uuid.UUID
-	ShardStatus   string
-	ErrorMessage  *string
-	OutputOSSKey  string
-	OutputSHA256  string
+	ShardID      uuid.UUID
+	ShardStatus  string
+	ErrorMessage *string
+	OutputOSSKey string
+	OutputSHA256 string
 }
 
 func ReportShardStatus(ctx context.Context, params ReportShardStatusParams) error {
@@ -68,13 +68,10 @@ func ReportShardStatus(ctx context.Context, params ReportShardStatusParams) erro
 		case model.ShardStatusRunning:
 			updateParams.CurrentStatuses = []string{model.ShardStatusLeased}
 			updateParams.StartedAt = &now
-		case model.ShardStatusResultReady:
-			updateParams.CurrentStatuses = []string{model.ShardStatusRunning}
-			updateParams.FinishedAt = &now
 		case model.ShardStatusSucceeded:
-			updateParams.CurrentStatuses = []string{model.ShardStatusResultReady}
+			updateParams.CurrentStatuses = []string{model.ShardStatusRunning}
 		case model.ShardStatusFailed:
-			updateParams.CurrentStatuses = []string{model.ShardStatusRunning, model.ShardStatusResultReady}
+			updateParams.CurrentStatuses = []string{model.ShardStatusRunning}
 			updateParams.FinishedAt = &now
 			updateParams.LastError = params.ErrorMessage
 		}

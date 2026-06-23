@@ -187,7 +187,7 @@ func TestReportShardStatusTransitionsToSucceededWithOSSOutput(t *testing.T) {
 		Status:        model.TaskStatusRunning,
 		ShardCount:    1,
 	})
-	mustCreateTaskShardWithID(t, ctx, db, shardID, taskID, model.ShardStatusResultReady)
+	mustCreateTaskShardWithID(t, ctx, db, shardID, taskID, model.ShardStatusRunning)
 
 	if err := ReportShardStatus(ctx, ReportShardStatusParams{
 		ShardID:      shardID,

@@ -12,7 +12,7 @@ func GetActiveTaskShardByAgent(ctx context.Context, db *gorm.DB, agentID string)
 	var shards []model.TaskShard
 	err := db.WithContext(ctx).
 		Where("assigned_agent_id = ?", agentID).
-		Where("status IN ?", []string{model.ShardStatusLeased, model.ShardStatusRunning, model.ShardStatusResultReady}).
+		Where("status IN ?", []string{model.ShardStatusLeased, model.ShardStatusRunning}).
 		Find(&shards).Error
 	return shards, err
 }

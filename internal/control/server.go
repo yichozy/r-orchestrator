@@ -119,25 +119,6 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 		zap.String("status", registered_agent.Status),
 	)
 
-	// If reconnection restored a RESULT_READY agent, the agent already
-	// uploaded output to OSS. Reset to idle and try to assign next shard.
-	if registered_agent.Status == agent_service.AgentStatusResultReady && registered_agent.CurrentShardID != nil {
-		server.logger.Info("reconnected agent had pending result, marking idle",
-			zap.String("agent_id", agentID),
-			zap.String("current_shard_id", *registered_agent.CurrentShardID),
-		)
-		if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
-			AgentID:        agentID,
-			Status:         agent_service.AgentStatusIdle,
-			CurrentShardID: nil,
-		}); err != nil {
-			return status.Errorf(codes.Internal, "reset reconnected agent: %v", err)
-		}
-		if err := server.TryAssignShard(sess); err != nil {
-			return err
-		}
-	}
-
 	for {
 		if err := stream.Context().Err(); err != nil {
 			server.logger.Info("agent stream cancelled",

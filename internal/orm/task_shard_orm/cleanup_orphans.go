@@ -38,7 +38,7 @@ func CleanupOrphanShards(ctx context.Context, db *gorm.DB, registeredAgentIDs []
 			}
 			if err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 				return RollbackShardWithTask(ctx, tx, shard.ID, []string{
-					model.ShardStatusLeased, model.ShardStatusRunning, model.ShardStatusResultReady,
+					model.ShardStatusLeased, model.ShardStatusRunning,
 				}, task)
 			}); err != nil {
 				continue

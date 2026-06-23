@@ -7,13 +7,12 @@ import (
 )
 
 const (
-	ShardStatusQueued      = "QUEUED"
-	ShardStatusLeased      = "LEASED"
-	ShardStatusRunning     = "RUNNING"
-	ShardStatusResultReady = "RESULT_READY"
-	ShardStatusSucceeded   = "SUCCEEDED"
-	ShardStatusFailed      = "FAILED"
-	ShardStatusCancelled   = "CANCELLED"
+	ShardStatusQueued    = "QUEUED"
+	ShardStatusLeased    = "LEASED"
+	ShardStatusRunning   = "RUNNING"
+	ShardStatusSucceeded = "SUCCEEDED"
+	ShardStatusFailed    = "FAILED"
+	ShardStatusCancelled = "CANCELLED"
 )
 
 type TaskShard struct {

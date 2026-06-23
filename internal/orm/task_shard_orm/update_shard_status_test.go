@@ -13,35 +13,6 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestUpdateShardStatusAllowsResultReadyTransition(t *testing.T) {
-	ctx := context.Background()
-	db := newTestDB(t)
-	taskID := uuid.Must(uuid.NewV7())
-	shardID := uuid.Must(uuid.NewV7())
-
-	mustCreateTask(t, ctx, db, taskID, model.TaskStatusRunning)
-	mustCreateTaskShardWithID(t, ctx, db, shardID, taskID, model.ShardStatusRunning)
-
-	now := time.Now()
-	err := UpdateShardStatus(ctx, db, UpdateShardStatusParams{
-		ShardID:         shardID,
-		Status:          model.ShardStatusResultReady,
-		CurrentStatuses: []string{model.ShardStatusRunning},
-		FinishedAt:      &now,
-	})
-	if err != nil {
-		t.Fatalf("UpdateShardStatus() error = %v", err)
-	}
-
-	shard, err := GetByID(ctx, db, shardID)
-	if err != nil {
-		t.Fatalf("GetByID() error = %v", err)
-	}
-	if shard.Status != model.ShardStatusResultReady {
-		t.Fatalf("shard.Status = %s, want %s", shard.Status, model.ShardStatusResultReady)
-	}
-}
-
 func TestUpdateShardStatusAllowsTerminalTransitionDuringMigration(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -50,10 +21,6 @@ func TestUpdateShardStatusAllowsTerminalTransitionDuringMigration(t *testing.T) 
 		{
 			name:          "from running",
 			initialStatus: model.ShardStatusRunning,
-		},
-		{
-			name:          "from result ready",
-			initialStatus: model.ShardStatusResultReady,
 		},
 	}
 

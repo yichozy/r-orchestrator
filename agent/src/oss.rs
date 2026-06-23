@@ -24,7 +24,6 @@ pub async fn upload_file(url: &str, local_path: &Path) -> Result<(), Box<dyn std
     let client = reqwest::Client::new();
     let response = client
         .put(url)
-        .header("Content-Type", "application/octet-stream")
         .body(bytes)
         .send()
         .await?;

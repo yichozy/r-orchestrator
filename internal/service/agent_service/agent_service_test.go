@@ -74,7 +74,7 @@ func TestRegisterAgentPreservesRunningStateForSameIdentityReconnect(t *testing.T
 	shard1 := "shard-001"
 
 	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
-	HeartbeatAgent(HeartbeatAgentParams{AgentID: agent1, Status: "RUNNING", CurrentShardID: &shard1})
+	HeartbeatAgent(HeartbeatAgentParams{AgentID: agent1, Status: AgentStatusRunning, CurrentShardID: &shard1})
 
 	DisconnectAgent(agent1)
 
@@ -85,34 +85,8 @@ func TestRegisterAgentPreservesRunningStateForSameIdentityReconnect(t *testing.T
 	}
 
 	registered := agents[agent1]
-	if registered.Status != "RUNNING" {
+	if registered.Status != AgentStatusRunning {
 		t.Fatalf("expected RUNNING state to be recovered, got %q", registered.Status)
-	}
-	if registered.CurrentShardID == nil || *registered.CurrentShardID != shard1 {
-		t.Fatalf("expected current shard %s to be recovered, got %v", shard1, registered.CurrentShardID)
-	}
-}
-
-func TestRegisterAgentPreservesResultReadyStateForSameIdentityReconnect(t *testing.T) {
-	setupTest(t, nil)
-	agent1 := "pod-agent-0"
-	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
-	shard1 := "shard-001"
-
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
-	HeartbeatAgent(HeartbeatAgentParams{AgentID: agent1, Status: AgentStatusResultReady, CurrentShardID: &shard1})
-
-	DisconnectAgent(agent1)
-
-	if err := RegisterAgent(RegisterAgentParams{
-		AgentID: agent1, TenantID: tenantA, BackendName: "backend-a",
-	}); err != nil {
-		t.Fatalf("re-register disconnected agent: %v", err)
-	}
-
-	registered := agents[agent1]
-	if registered.Status != AgentStatusResultReady {
-		t.Fatalf("expected RESULT_READY state to be recovered, got %q", registered.Status)
 	}
 	if registered.CurrentShardID == nil || *registered.CurrentShardID != shard1 {
 		t.Fatalf("expected current shard %s to be recovered, got %v", shard1, registered.CurrentShardID)

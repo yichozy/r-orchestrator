@@ -40,7 +40,7 @@ func RegisterAgent(params RegisterAgentParams) error {
 			}
 			registered_agent.Status = recoveryStatus
 			registered_agent.CurrentShardID = existing_agent.CurrentShardID
-		case AgentStatusRunning, AgentStatusResultReady:
+		case AgentStatusRunning:
 			registered_agent.Status = existing_agent.Status
 			registered_agent.CurrentShardID = existing_agent.CurrentShardID
 			return fmt.Errorf("%w: %s already has an active control stream", ErrAgentIdentityConflict, params.AgentID)

@@ -16,7 +16,6 @@ var ErrAgentIdentityConflict = errors.New("agent identity conflict")
 const (
 	AgentStatusIdle         = "IDLE"
 	AgentStatusRunning      = "RUNNING"
-	AgentStatusResultReady  = "RESULT_READY"
 	AgentStatusDisconnected = "DISCONNECTED"
 	AgentStatusUnresponsive = "UNRESPONSIVE"
 	AgentStatusTimedOut     = "TIMED_OUT"
@@ -88,14 +87,14 @@ func SetTimeouts(hb, gp time.Duration) {
 }
 
 // GetActiveTenantIDs returns the set of tenant IDs that have at least one
-// active agent (IDLE, RUNNING, RESULT_READY, or UNRESPONSIVE).
+// active agent (IDLE, RUNNING, or UNRESPONSIVE).
 func GetActiveTenantIDs() map[uuid.UUID]bool {
 	mu.Lock()
 	defer mu.Unlock()
 	tenants := make(map[uuid.UUID]bool)
 	for _, a := range agents {
 		if a.Status == AgentStatusIdle || a.Status == AgentStatusRunning ||
-			a.Status == AgentStatusResultReady || a.Status == AgentStatusUnresponsive {
+			a.Status == AgentStatusUnresponsive {
 			tenants[a.TenantID] = true
 		}
 	}
@@ -209,7 +208,7 @@ func onHeartbeatTimeout(agentID string) {
 		}
 		return
 
-	default: // IDLE, RUNNING, RESULT_READY
+	default: // IDLE, RUNNING
 		agent.Status = AgentStatusUnresponsive
 		agents[agentID] = agent
 		mu.Unlock()

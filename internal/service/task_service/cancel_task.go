@@ -44,7 +44,7 @@ func CancelTask(ctx context.Context, tenantName string, taskID uuid.UUID) error 
 		Model(&model.TaskShard{}).
 		Select("assigned_agent_id, id").
 		Where("task_id = ?", taskID).
-		Where("status IN ?", []string{model.ShardStatusLeased, model.ShardStatusRunning, model.ShardStatusResultReady}).
+		Where("status IN ?", []string{model.ShardStatusLeased, model.ShardStatusRunning}).
 		Where("assigned_agent_id IS NOT NULL").
 		Find(&runningShards).Error; err != nil {
 		return err
