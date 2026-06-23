@@ -18,15 +18,15 @@ const (
 
 type TaskShard struct {
 	BaseUUIDModel
-	TaskID          uuid.UUID  `gorm:"column:task_id;not null;type:uuid"`
-	ScriptName      string     `gorm:"column:script_name;not null;default:''"`
-	Status          string     `gorm:"column:status;not null"`
-	AssignedAgentID string     `gorm:"column:assigned_agent_id;type:varchar(255)"`
-	OutputOSSKey    string     `gorm:"column:output_oss_key;not null;default:''"`
-	OutputSHA256    string     `gorm:"column:output_sha256;not null;default:''"`
-	StartedAt       *time.Time `gorm:"column:started_at"`
-	FinishedAt      *time.Time `gorm:"column:finished_at"`
-	LastError       string     `gorm:"column:last_error;not null;default:''"`
+	TaskID          uuid.UUID  `json:"task_id" gorm:"column:task_id;not null;type:uuid"`
+	ScriptName      string     `json:"script_name" gorm:"column:script_name;not null;default:''"`
+	Status          string     `json:"status" gorm:"column:status;not null"`
+	AssignedAgentID string     `json:"assigned_agent_id" gorm:"column:assigned_agent_id;type:varchar(255)"`
+	OutputOSSKey    string     `json:"output_oss_key" gorm:"column:output_oss_key;not null;default:''"`
+	OutputSHA256    string     `json:"output_sha256" gorm:"column:output_sha256;not null;default:''"`
+	StartedAt       *time.Time `json:"started_at" gorm:"column:started_at"`
+	FinishedAt      *time.Time `json:"finished_at" gorm:"column:finished_at"`
+	LastError       string     `json:"last_error" gorm:"column:last_error;not null;default:''"`
 }
 
 func (TaskShard) TableName() string { return "task_shards" }

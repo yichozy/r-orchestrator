@@ -11,26 +11,26 @@ type Mutation {
   CancelTask(tenant_name: String!, task_id: UUID!): CancelTaskPayload!
 }
 
-type TaskScript {
+type TaskShard {
+  id: UUID!
   script_name: String!
   status: String!
   output_oss_key: String
   output_sha256: String
-  error_message: String
+  last_error: String
   started_at: Time
   finished_at: Time
 }
 
 type Task {
   id: UUID!
-  tenant_name: String!
   status: String!
   last_error: String!
   created_at: Time!
   started_at: Time
   finished_at: Time
   shard_count: Int!
-  scripts: [TaskScript!]!
+  shards: [TaskShard!]!
 }
 
 input SubmitTaskInput {

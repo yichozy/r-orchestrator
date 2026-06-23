@@ -11,7 +11,9 @@ import (
 
 func GetByID(ctx context.Context, db *gorm.DB, taskID uuid.UUID) (model.Task, error) {
 	var task model.Task
-	if err := db.WithContext(ctx).Where("id = ?", taskID).First(&task).Error; err != nil {
+	if err := db.WithContext(ctx).Preload("Shards", func(db *gorm.DB) *gorm.DB {
+		return db.Order("script_name ASC")
+	}).Where("id = ?", taskID).First(&task).Error; err != nil {
 		return model.Task{}, fmt.Errorf("get task by id: %w", err)
 	}
 	return task, nil

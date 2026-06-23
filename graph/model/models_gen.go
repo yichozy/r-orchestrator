@@ -37,23 +37,23 @@ type SubmitTaskResponse struct {
 }
 
 type Task struct {
-	ID         uuid.UUID     `json:"id"`
-	TenantName string        `json:"tenant_name"`
-	Status     string        `json:"status"`
-	LastError  string        `json:"last_error"`
-	CreatedAt  time.Time     `json:"created_at"`
-	StartedAt  *time.Time    `json:"started_at,omitempty"`
-	FinishedAt *time.Time    `json:"finished_at,omitempty"`
-	ShardCount int           `json:"shard_count"`
-	Scripts    []*TaskScript `json:"scripts"`
+	ID         uuid.UUID    `json:"id"`
+	Status     string       `json:"status"`
+	LastError  string       `json:"last_error"`
+	CreatedAt  time.Time    `json:"created_at"`
+	StartedAt  *time.Time   `json:"started_at,omitempty"`
+	FinishedAt *time.Time   `json:"finished_at,omitempty"`
+	ShardCount int          `json:"shard_count"`
+	Shards     []*TaskShard `json:"shards"`
 }
 
-type TaskScript struct {
+type TaskShard struct {
+	ID           uuid.UUID  `json:"id"`
 	ScriptName   string     `json:"script_name"`
 	Status       string     `json:"status"`
 	OutputOssKey *string    `json:"output_oss_key,omitempty"`
 	OutputSha256 *string    `json:"output_sha256,omitempty"`
-	ErrorMessage *string    `json:"error_message,omitempty"`
+	LastError    *string    `json:"last_error,omitempty"`
 	StartedAt    *time.Time `json:"started_at,omitempty"`
 	FinishedAt   *time.Time `json:"finished_at,omitempty"`
 }

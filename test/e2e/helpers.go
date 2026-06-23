@@ -73,21 +73,16 @@ func cleanupTestTenant(t *testing.T, tenantID uuid.UUID) {
 	db.WithContext(testCtx).Where("id = ?", tenantID).Delete(&model.Tenant{})
 }
 
-func submitTestTask(t *testing.T, tenantName string, zipPath, csvPath string) uuid.UUID {
+func submitTestTask(t *testing.T, tenantName string, zipPath string) uuid.UUID {
 	t.Helper()
 	zipBytes, err := os.ReadFile(zipPath)
 	if err != nil {
 		t.Fatalf("read zip: %v", err)
 	}
-	csvBytes, err := os.ReadFile(csvPath)
-	if err != nil {
-		t.Fatalf("read csv: %v", err)
-	}
 
 	taskID, err := task_service.SubmitTask(testCtx, task_service.SubmitTaskParams{
 		TenantName: tenantName,
 		ZipBytes:   zipBytes,
-		CSVBytes:   csvBytes,
 	})
 	if err != nil {
 		t.Fatalf("submit task: %v", err)

@@ -22,7 +22,6 @@ func TestClusterProvisioning(t *testing.T) {
 
 	taskID := submitTestTask(t, tenantName,
 		"test-data/e2e-bundle/bundle.zip",
-		"test-data/params.csv",
 	)
 
 	// Wait for poll_pending_tasks to provision the cluster.
@@ -42,7 +41,6 @@ func TestClusterIdleRecycling(t *testing.T) {
 
 	taskID := submitTestTask(t, tenantName,
 		"test-data/e2e-bundle/bundle.zip",
-		"test-data/params.csv",
 	)
 
 	stsName := clusterName(tenantID.String())

@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/yichozy/hopebox/utils"
 	gqlmodel "github.com/yichozy/r-orchestrator/graph/model"
 	"github.com/yichozy/r-orchestrator/internal/model"
 	"github.com/yichozy/r-orchestrator/internal/orm"
@@ -35,10 +36,9 @@ func (r *mutationResolver) CreateTenant(ctx context.Context, input gqlmodel.Crea
 		return nil, err
 	}
 
-	return &gqlmodel.Tenant{
-		ID:                 tenant.ID,
-		Name:               tenant.Name,
-		PrimaryBackendName: tenant.PrimaryBackendName,
-		MaxAgents:          tenant.MaxAgents,
-	}, nil
+	var result gqlmodel.Tenant
+	if err := utils.CopyObj(&tenant, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
 }

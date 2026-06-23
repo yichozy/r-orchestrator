@@ -63,16 +63,16 @@ type ComplexityRoot struct {
 		FinishedAt func(childComplexity int) int
 		ID         func(childComplexity int) int
 		LastError  func(childComplexity int) int
-		Scripts    func(childComplexity int) int
 		ShardCount func(childComplexity int) int
+		Shards     func(childComplexity int) int
 		StartedAt  func(childComplexity int) int
 		Status     func(childComplexity int) int
-		TenantName func(childComplexity int) int
 	}
 
-	TaskScript struct {
-		ErrorMessage func(childComplexity int) int
+	TaskShard struct {
 		FinishedAt   func(childComplexity int) int
+		ID           func(childComplexity int) int
+		LastError    func(childComplexity int) int
 		OutputOssKey func(childComplexity int) int
 		OutputSha256 func(childComplexity int) int
 		ScriptName   func(childComplexity int) int
@@ -213,18 +213,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Task.LastError(childComplexity), true
-	case "Task.scripts":
-		if e.ComplexityRoot.Task.Scripts == nil {
-			break
-		}
-
-		return e.ComplexityRoot.Task.Scripts(childComplexity), true
 	case "Task.shard_count":
 		if e.ComplexityRoot.Task.ShardCount == nil {
 			break
 		}
 
 		return e.ComplexityRoot.Task.ShardCount(childComplexity), true
+	case "Task.shards":
+		if e.ComplexityRoot.Task.Shards == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Task.Shards(childComplexity), true
 	case "Task.started_at":
 		if e.ComplexityRoot.Task.StartedAt == nil {
 			break
@@ -237,55 +237,55 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Task.Status(childComplexity), true
-	case "Task.tenant_name":
-		if e.ComplexityRoot.Task.TenantName == nil {
+
+	case "TaskShard.finished_at":
+		if e.ComplexityRoot.TaskShard.FinishedAt == nil {
 			break
 		}
 
-		return e.ComplexityRoot.Task.TenantName(childComplexity), true
-
-	case "TaskScript.error_message":
-		if e.ComplexityRoot.TaskScript.ErrorMessage == nil {
+		return e.ComplexityRoot.TaskShard.FinishedAt(childComplexity), true
+	case "TaskShard.id":
+		if e.ComplexityRoot.TaskShard.ID == nil {
 			break
 		}
 
-		return e.ComplexityRoot.TaskScript.ErrorMessage(childComplexity), true
-	case "TaskScript.finished_at":
-		if e.ComplexityRoot.TaskScript.FinishedAt == nil {
+		return e.ComplexityRoot.TaskShard.ID(childComplexity), true
+	case "TaskShard.last_error":
+		if e.ComplexityRoot.TaskShard.LastError == nil {
 			break
 		}
 
-		return e.ComplexityRoot.TaskScript.FinishedAt(childComplexity), true
-	case "TaskScript.output_oss_key":
-		if e.ComplexityRoot.TaskScript.OutputOssKey == nil {
+		return e.ComplexityRoot.TaskShard.LastError(childComplexity), true
+	case "TaskShard.output_oss_key":
+		if e.ComplexityRoot.TaskShard.OutputOssKey == nil {
 			break
 		}
 
-		return e.ComplexityRoot.TaskScript.OutputOssKey(childComplexity), true
-	case "TaskScript.output_sha256":
-		if e.ComplexityRoot.TaskScript.OutputSha256 == nil {
+		return e.ComplexityRoot.TaskShard.OutputOssKey(childComplexity), true
+	case "TaskShard.output_sha256":
+		if e.ComplexityRoot.TaskShard.OutputSha256 == nil {
 			break
 		}
 
-		return e.ComplexityRoot.TaskScript.OutputSha256(childComplexity), true
-	case "TaskScript.script_name":
-		if e.ComplexityRoot.TaskScript.ScriptName == nil {
+		return e.ComplexityRoot.TaskShard.OutputSha256(childComplexity), true
+	case "TaskShard.script_name":
+		if e.ComplexityRoot.TaskShard.ScriptName == nil {
 			break
 		}
 
-		return e.ComplexityRoot.TaskScript.ScriptName(childComplexity), true
-	case "TaskScript.started_at":
-		if e.ComplexityRoot.TaskScript.StartedAt == nil {
+		return e.ComplexityRoot.TaskShard.ScriptName(childComplexity), true
+	case "TaskShard.started_at":
+		if e.ComplexityRoot.TaskShard.StartedAt == nil {
 			break
 		}
 
-		return e.ComplexityRoot.TaskScript.StartedAt(childComplexity), true
-	case "TaskScript.status":
-		if e.ComplexityRoot.TaskScript.Status == nil {
+		return e.ComplexityRoot.TaskShard.StartedAt(childComplexity), true
+	case "TaskShard.status":
+		if e.ComplexityRoot.TaskShard.Status == nil {
 			break
 		}
 
-		return e.ComplexityRoot.TaskScript.Status(childComplexity), true
+		return e.ComplexityRoot.TaskShard.Status(childComplexity), true
 
 	case "Tenant.id":
 		if e.ComplexityRoot.Tenant.ID == nil {
@@ -410,26 +410,26 @@ type Mutation {
   CancelTask(tenant_name: String!, task_id: UUID!): CancelTaskPayload!
 }
 
-type TaskScript {
+type TaskShard {
+  id: UUID!
   script_name: String!
   status: String!
   output_oss_key: String
   output_sha256: String
-  error_message: String
+  last_error: String
   started_at: Time
   finished_at: Time
 }
 
 type Task {
   id: UUID!
-  tenant_name: String!
   status: String!
   last_error: String!
   created_at: Time!
   started_at: Time
   finished_at: Time
   shard_count: Int!
-  scripts: [TaskScript!]!
+  shards: [TaskShard!]!
 }
 
 input SubmitTaskInput {
@@ -495,8 +495,6 @@ func (ec *executionContext) childFields_Task(ctx context.Context, field graphql.
 	switch field.Name {
 	case "id":
 		return ec.fieldContext_Task_id(ctx, field)
-	case "tenant_name":
-		return ec.fieldContext_Task_tenant_name(ctx, field)
 	case "status":
 		return ec.fieldContext_Task_status(ctx, field)
 	case "last_error":
@@ -509,30 +507,32 @@ func (ec *executionContext) childFields_Task(ctx context.Context, field graphql.
 		return ec.fieldContext_Task_finished_at(ctx, field)
 	case "shard_count":
 		return ec.fieldContext_Task_shard_count(ctx, field)
-	case "scripts":
-		return ec.fieldContext_Task_scripts(ctx, field)
+	case "shards":
+		return ec.fieldContext_Task_shards(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Task", field.Name)
 }
 
-func (ec *executionContext) childFields_TaskScript(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+func (ec *executionContext) childFields_TaskShard(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
+	case "id":
+		return ec.fieldContext_TaskShard_id(ctx, field)
 	case "script_name":
-		return ec.fieldContext_TaskScript_script_name(ctx, field)
+		return ec.fieldContext_TaskShard_script_name(ctx, field)
 	case "status":
-		return ec.fieldContext_TaskScript_status(ctx, field)
+		return ec.fieldContext_TaskShard_status(ctx, field)
 	case "output_oss_key":
-		return ec.fieldContext_TaskScript_output_oss_key(ctx, field)
+		return ec.fieldContext_TaskShard_output_oss_key(ctx, field)
 	case "output_sha256":
-		return ec.fieldContext_TaskScript_output_sha256(ctx, field)
-	case "error_message":
-		return ec.fieldContext_TaskScript_error_message(ctx, field)
+		return ec.fieldContext_TaskShard_output_sha256(ctx, field)
+	case "last_error":
+		return ec.fieldContext_TaskShard_last_error(ctx, field)
 	case "started_at":
-		return ec.fieldContext_TaskScript_started_at(ctx, field)
+		return ec.fieldContext_TaskShard_started_at(ctx, field)
 	case "finished_at":
-		return ec.fieldContext_TaskScript_finished_at(ctx, field)
+		return ec.fieldContext_TaskShard_finished_at(ctx, field)
 	}
-	return nil, fmt.Errorf("no field named %q was found under type TaskScript", field.Name)
+	return nil, fmt.Errorf("no field named %q was found under type TaskShard", field.Name)
 }
 
 func (ec *executionContext) childFields_Tenant(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -1225,29 +1225,6 @@ func (ec *executionContext) fieldContext_Task_id(_ context.Context, field graphq
 	return graphql.NewScalarFieldContext("Task", field, false, false, errors.New("field of type UUID does not have child fields"))
 }
 
-func (ec *executionContext) _Task_tenant_name(ctx context.Context, field graphql.CollectedField, obj *model.Task) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_Task_tenant_name(ctx, field)
-		},
-		func(ctx context.Context) (any, error) {
-			return obj.TenantName, nil
-		},
-		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
-			return ec.marshalNString2string(ctx, selections, v)
-		},
-		true,
-		true,
-	)
-}
-func (ec *executionContext) fieldContext_Task_tenant_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("Task", field, false, false, errors.New("field of type String does not have child fields"))
-}
-
 func (ec *executionContext) _Task_status(ctx context.Context, field graphql.CollectedField, obj *model.Task) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -1386,45 +1363,68 @@ func (ec *executionContext) fieldContext_Task_shard_count(_ context.Context, fie
 	return graphql.NewScalarFieldContext("Task", field, false, false, errors.New("field of type Int does not have child fields"))
 }
 
-func (ec *executionContext) _Task_scripts(ctx context.Context, field graphql.CollectedField, obj *model.Task) (ret graphql.Marshaler) {
+func (ec *executionContext) _Task_shards(ctx context.Context, field graphql.CollectedField, obj *model.Task) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_Task_scripts(ctx, field)
+			return ec.fieldContext_Task_shards(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.Scripts, nil
+			return obj.Shards, nil
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v []*model.TaskScript) graphql.Marshaler {
-			return ec.marshalNTaskScript2ᚕᚖgithubᚗcomᚋyichozyᚋrᚑorchestratorᚋgraphᚋmodelᚐTaskScriptᚄ(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v []*model.TaskShard) graphql.Marshaler {
+			return ec.marshalNTaskShard2ᚕᚖgithubᚗcomᚋyichozyᚋrᚑorchestratorᚋgraphᚋmodelᚐTaskShardᚄ(ctx, selections, v)
 		},
 		true,
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_Task_scripts(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Task_shards(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Task",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.childFields_TaskScript(ctx, field)
+			return ec.childFields_TaskShard(ctx, field)
 		},
 	}
 	return fc, nil
 }
 
-func (ec *executionContext) _TaskScript_script_name(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
+func (ec *executionContext) _TaskShard_id(ctx context.Context, field graphql.CollectedField, obj *model.TaskShard) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_TaskScript_script_name(ctx, field)
+			return ec.fieldContext_TaskShard_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TaskShard_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TaskShard", field, false, false, errors.New("field of type UUID does not have child fields"))
+}
+
+func (ec *executionContext) _TaskShard_script_name(ctx context.Context, field graphql.CollectedField, obj *model.TaskShard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TaskShard_script_name(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
 			return obj.ScriptName, nil
@@ -1437,17 +1437,17 @@ func (ec *executionContext) _TaskScript_script_name(ctx context.Context, field g
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_TaskScript_script_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type String does not have child fields"))
+func (ec *executionContext) fieldContext_TaskShard_script_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TaskShard", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
-func (ec *executionContext) _TaskScript_status(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
+func (ec *executionContext) _TaskShard_status(ctx context.Context, field graphql.CollectedField, obj *model.TaskShard) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_TaskScript_status(ctx, field)
+			return ec.fieldContext_TaskShard_status(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
 			return obj.Status, nil
@@ -1460,17 +1460,17 @@ func (ec *executionContext) _TaskScript_status(ctx context.Context, field graphq
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_TaskScript_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type String does not have child fields"))
+func (ec *executionContext) fieldContext_TaskShard_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TaskShard", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
-func (ec *executionContext) _TaskScript_output_oss_key(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
+func (ec *executionContext) _TaskShard_output_oss_key(ctx context.Context, field graphql.CollectedField, obj *model.TaskShard) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_TaskScript_output_oss_key(ctx, field)
+			return ec.fieldContext_TaskShard_output_oss_key(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
 			return obj.OutputOssKey, nil
@@ -1483,17 +1483,17 @@ func (ec *executionContext) _TaskScript_output_oss_key(ctx context.Context, fiel
 		false,
 	)
 }
-func (ec *executionContext) fieldContext_TaskScript_output_oss_key(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type String does not have child fields"))
+func (ec *executionContext) fieldContext_TaskShard_output_oss_key(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TaskShard", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
-func (ec *executionContext) _TaskScript_output_sha256(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
+func (ec *executionContext) _TaskShard_output_sha256(ctx context.Context, field graphql.CollectedField, obj *model.TaskShard) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_TaskScript_output_sha256(ctx, field)
+			return ec.fieldContext_TaskShard_output_sha256(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
 			return obj.OutputSha256, nil
@@ -1506,20 +1506,20 @@ func (ec *executionContext) _TaskScript_output_sha256(ctx context.Context, field
 		false,
 	)
 }
-func (ec *executionContext) fieldContext_TaskScript_output_sha256(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type String does not have child fields"))
+func (ec *executionContext) fieldContext_TaskShard_output_sha256(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TaskShard", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
-func (ec *executionContext) _TaskScript_error_message(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
+func (ec *executionContext) _TaskShard_last_error(ctx context.Context, field graphql.CollectedField, obj *model.TaskShard) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_TaskScript_error_message(ctx, field)
+			return ec.fieldContext_TaskShard_last_error(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.ErrorMessage, nil
+			return obj.LastError, nil
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
@@ -1529,17 +1529,17 @@ func (ec *executionContext) _TaskScript_error_message(ctx context.Context, field
 		false,
 	)
 }
-func (ec *executionContext) fieldContext_TaskScript_error_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type String does not have child fields"))
+func (ec *executionContext) fieldContext_TaskShard_last_error(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TaskShard", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
-func (ec *executionContext) _TaskScript_started_at(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
+func (ec *executionContext) _TaskShard_started_at(ctx context.Context, field graphql.CollectedField, obj *model.TaskShard) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_TaskScript_started_at(ctx, field)
+			return ec.fieldContext_TaskShard_started_at(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
 			return obj.StartedAt, nil
@@ -1552,17 +1552,17 @@ func (ec *executionContext) _TaskScript_started_at(ctx context.Context, field gr
 		false,
 	)
 }
-func (ec *executionContext) fieldContext_TaskScript_started_at(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type Time does not have child fields"))
+func (ec *executionContext) fieldContext_TaskShard_started_at(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TaskShard", field, false, false, errors.New("field of type Time does not have child fields"))
 }
 
-func (ec *executionContext) _TaskScript_finished_at(ctx context.Context, field graphql.CollectedField, obj *model.TaskScript) (ret graphql.Marshaler) {
+func (ec *executionContext) _TaskShard_finished_at(ctx context.Context, field graphql.CollectedField, obj *model.TaskShard) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_TaskScript_finished_at(ctx, field)
+			return ec.fieldContext_TaskShard_finished_at(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
 			return obj.FinishedAt, nil
@@ -1575,8 +1575,8 @@ func (ec *executionContext) _TaskScript_finished_at(ctx context.Context, field g
 		false,
 	)
 }
-func (ec *executionContext) fieldContext_TaskScript_finished_at(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("TaskScript", field, false, false, errors.New("field of type Time does not have child fields"))
+func (ec *executionContext) fieldContext_TaskShard_finished_at(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TaskShard", field, false, false, errors.New("field of type Time does not have child fields"))
 }
 
 func (ec *executionContext) _Tenant_id(ctx context.Context, field graphql.CollectedField, obj *model.Tenant) (ret graphql.Marshaler) {
@@ -3082,11 +3082,6 @@ func (ec *executionContext) _Task(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "tenant_name":
-			out.Values[i] = ec._Task_tenant_name(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "status":
 			out.Values[i] = ec._Task_status(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -3111,8 +3106,8 @@ func (ec *executionContext) _Task(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "scripts":
-			out.Values[i] = ec._Task_scripts(ctx, field, obj)
+		case "shards":
+			out.Values[i] = ec._Task_shards(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -3139,37 +3134,42 @@ func (ec *executionContext) _Task(ctx context.Context, sel ast.SelectionSet, obj
 	return out
 }
 
-var taskScriptImplementors = []string{"TaskScript"}
+var taskShardImplementors = []string{"TaskShard"}
 
-func (ec *executionContext) _TaskScript(ctx context.Context, sel ast.SelectionSet, obj *model.TaskScript) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, taskScriptImplementors)
+func (ec *executionContext) _TaskShard(ctx context.Context, sel ast.SelectionSet, obj *model.TaskShard) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, taskShardImplementors)
 
 	out := graphql.NewFieldSet(fields)
 	deferred := make(map[string]*graphql.FieldSet)
 	for i, field := range fields {
 		switch field.Name {
 		case "__typename":
-			out.Values[i] = graphql.MarshalString("TaskScript")
+			out.Values[i] = graphql.MarshalString("TaskShard")
+		case "id":
+			out.Values[i] = ec._TaskShard_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "script_name":
-			out.Values[i] = ec._TaskScript_script_name(ctx, field, obj)
+			out.Values[i] = ec._TaskShard_script_name(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
 		case "status":
-			out.Values[i] = ec._TaskScript_status(ctx, field, obj)
+			out.Values[i] = ec._TaskShard_status(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
 		case "output_oss_key":
-			out.Values[i] = ec._TaskScript_output_oss_key(ctx, field, obj)
+			out.Values[i] = ec._TaskShard_output_oss_key(ctx, field, obj)
 		case "output_sha256":
-			out.Values[i] = ec._TaskScript_output_sha256(ctx, field, obj)
-		case "error_message":
-			out.Values[i] = ec._TaskScript_error_message(ctx, field, obj)
+			out.Values[i] = ec._TaskShard_output_sha256(ctx, field, obj)
+		case "last_error":
+			out.Values[i] = ec._TaskShard_last_error(ctx, field, obj)
 		case "started_at":
-			out.Values[i] = ec._TaskScript_started_at(ctx, field, obj)
+			out.Values[i] = ec._TaskShard_started_at(ctx, field, obj)
 		case "finished_at":
-			out.Values[i] = ec._TaskScript_finished_at(ctx, field, obj)
+			out.Values[i] = ec._TaskShard_finished_at(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -3698,11 +3698,11 @@ func (ec *executionContext) marshalNTask2ᚖgithubᚗcomᚋyichozyᚋrᚑorchest
 	return ec._Task(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNTaskScript2ᚕᚖgithubᚗcomᚋyichozyᚋrᚑorchestratorᚋgraphᚋmodelᚐTaskScriptᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.TaskScript) graphql.Marshaler {
+func (ec *executionContext) marshalNTaskShard2ᚕᚖgithubᚗcomᚋyichozyᚋrᚑorchestratorᚋgraphᚋmodelᚐTaskShardᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.TaskShard) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
 		fc.Result = &v[i]
-		return ec.marshalNTaskScript2ᚖgithubᚗcomᚋyichozyᚋrᚑorchestratorᚋgraphᚋmodelᚐTaskScript(ctx, sel, v[i])
+		return ec.marshalNTaskShard2ᚖgithubᚗcomᚋyichozyᚋrᚑorchestratorᚋgraphᚋmodelᚐTaskShard(ctx, sel, v[i])
 	})
 
 	for _, e := range ret {
@@ -3714,14 +3714,14 @@ func (ec *executionContext) marshalNTaskScript2ᚕᚖgithubᚗcomᚋyichozyᚋr�
 	return ret
 }
 
-func (ec *executionContext) marshalNTaskScript2ᚖgithubᚗcomᚋyichozyᚋrᚑorchestratorᚋgraphᚋmodelᚐTaskScript(ctx context.Context, sel ast.SelectionSet, v *model.TaskScript) graphql.Marshaler {
+func (ec *executionContext) marshalNTaskShard2ᚖgithubᚗcomᚋyichozyᚋrᚑorchestratorᚋgraphᚋmodelᚐTaskShard(ctx context.Context, sel ast.SelectionSet, v *model.TaskShard) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
 		}
 		return graphql.Null
 	}
-	return ec._TaskScript(ctx, sel, v)
+	return ec._TaskShard(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNTenant2githubᚗcomᚋyichozyᚋrᚑorchestratorᚋgraphᚋmodelᚐTenant(ctx context.Context, sel ast.SelectionSet, v model.Tenant) graphql.Marshaler {

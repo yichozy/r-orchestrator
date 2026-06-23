@@ -85,8 +85,8 @@ func TestQueryResolverGetTaskListFiltersByTenantName(t *testing.T) {
 	if got[0].ID != alphaRunningTaskID {
 		t.Fatalf("GetTaskList()[0].ID = %s, want %s", got[0].ID, alphaRunningTaskID)
 	}
-	if got[0].TenantName != "team-alpha" {
-		t.Fatalf("GetTaskList()[0].TenantName = %q, want %q", got[0].TenantName, "team-alpha")
+	if got[0].Status != imodel.TaskStatusRunning {
+		t.Fatalf("GetTaskList()[0].Status = %q, want %q", got[0].Status, imodel.TaskStatusRunning)
 	}
 }
 
@@ -161,11 +161,11 @@ func TestTaskGraphQLSchemaHasExpectedQueriesAndTypes(t *testing.T) {
 		"GetTaskByID(tenant_name: String!, task_id: UUID!): Task!",
 		"GetTaskList(tenant_name: String!, status: String): [Task!]!",
 		"CancelTask(tenant_name: String!, task_id: UUID!): CancelTaskPayload!",
-		"type Task {\n  id: UUID!\n  tenant_name: String!",
-		"scripts: [TaskScript!]!",
+		"type Task {\n  id: UUID!\n  status: String!",
+		"shards: [TaskShard!]!",
 		"input SubmitTaskInput {\n  tenant_name: String!",
 		"bundle_zip: Upload!",
-		"type TaskScript {",
+		"type TaskShard {",
 	}
 	for _, snippet := range requiredSnippets {
 		if !strings.Contains(schema, snippet) {

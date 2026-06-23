@@ -20,27 +20,6 @@ type SubmitTaskParams struct {
 	CompletionHookURL string
 }
 
-type TaskView struct {
-	ID         uuid.UUID
-	TenantName string
-	Status     string
-	CreatedAt  time.Time
-	StartedAt  *time.Time
-	FinishedAt *time.Time
-	ShardCount int
-	LastError  string
-}
-
-type TaskScriptView struct {
-	ScriptName    string
-	Status        string
-	OutputOSSKey  string
-	OutputSHA256  string
-	ErrorMessage  string
-	StartedAt     *time.Time
-	FinishedAt    *time.Time
-}
-
 type CompletionHookPayload struct {
 	TaskID            uuid.UUID  `json:"task_id"`
 	TenantID          uuid.UUID  `json:"tenant_id"`
@@ -61,5 +40,3 @@ var runHookDispatchAsync = func(fn func()) {
 func SetNotifyCancelShard(f func(ctx context.Context, agentID string, shardID uuid.UUID) error) {
 	notifyCancelShard = f
 }
-
-

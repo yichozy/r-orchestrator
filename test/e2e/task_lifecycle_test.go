@@ -17,7 +17,6 @@ func TestSubmitAndExecute(t *testing.T) {
 
 	taskID := submitTestTask(t, tenantName,
 		"test-data/e2e-bundle/bundle.zip",
-		"test-data/params.csv",
 	)
 
 	// Wait for task to complete. Real k8s provisioning + agent execution can be slow.
@@ -39,7 +38,6 @@ func TestSubmitAndCancel(t *testing.T) {
 
 	taskID := submitTestTask(t, tenantName,
 		"test-data/e2e-bundle/bundle.zip",
-		"test-data/params.csv",
 	)
 
 	// Wait a bit for the task to be picked up by poll_pending_tasks.

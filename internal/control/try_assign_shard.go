@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 	aliyun "github.com/yichozy/hopebox/aliyun"
 	"github.com/yichozy/r-orchestrator/internal/service/agent_service"
-	ossSDK "github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/yichozy/r-orchestrator/internal/service/task_service"
 	controlv1 "github.com/yichozy/r-orchestrator/proto"
 	"go.uber.org/zap"
@@ -69,7 +68,7 @@ func (server *Server) TryAssignShard(sess *agentSession) (ret_err error) {
 	}
 
 	outputKey := fmt.Sprintf("r-orchestrator/tasks/%s/output/%s-output.zip", task.ID, shard.ScriptName)
-	outputURL, err := ossClient.Bucket.SignURL(outputKey, ossSDK.HTTPPut, 3600)
+	outputURL, err := ossClient.SignPutURL(outputKey, 3600)
 	if err != nil {
 		return status.Errorf(codes.Internal, "sign output url: %v", err)
 	}

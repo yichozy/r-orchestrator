@@ -6,42 +6,34 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/yichozy/r-orchestrator/internal/model"
 	"github.com/yichozy/r-orchestrator/internal/orm"
 	"github.com/yichozy/r-orchestrator/internal/orm/task_orm"
 	"github.com/yichozy/r-orchestrator/internal/orm/tenant_orm"
 	"gorm.io/gorm"
 )
 
-func GetTask(ctx context.Context, tenantName string, taskID uuid.UUID) (TaskView, error) {
+func GetTask(ctx context.Context, tenantName string, taskID uuid.UUID) (model.Task, error) {
 	db, err := orm.GetDB()
 	if err != nil {
-		return TaskView{}, err
+		return model.Task{}, err
 	}
 
 	tenant, err := tenant_orm.GetByName(ctx, db, tenantName)
 	if err != nil {
-		return TaskView{}, fmt.Errorf("%w: %s", ErrTenantNotFound, tenantName)
+		return model.Task{}, fmt.Errorf("%w: %s", ErrTenantNotFound, tenantName)
 	}
 
 	task, err := task_orm.GetByID(ctx, db, taskID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return TaskView{}, fmt.Errorf("%w: %s", ErrTaskNotFound, taskID)
+			return model.Task{}, fmt.Errorf("%w: %s", ErrTaskNotFound, taskID)
 		}
-		return TaskView{}, err
+		return model.Task{}, err
 	}
 	if task.TenantID != tenant.ID {
-		return TaskView{}, fmt.Errorf("%w: %s", ErrTaskNotFound, taskID)
+		return model.Task{}, fmt.Errorf("%w: %s", ErrTaskNotFound, taskID)
 	}
 
-	return TaskView{
-		ID:         task.ID,
-		TenantName: tenant.Name,
-		Status:     task.Status,
-		CreatedAt:  task.CreatedAt,
-		StartedAt:  task.StartedAt,
-		FinishedAt: task.FinishedAt,
-		ShardCount: task.ShardCount,
-		LastError:  task.LastError,
-	}, nil
+	return task, nil
 }

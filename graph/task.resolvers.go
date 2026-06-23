@@ -12,10 +12,10 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/yichozy/hopebox/utils"
 	"github.com/yichozy/r-orchestrator/graph/generated"
 	"github.com/yichozy/r-orchestrator/graph/model"
 	imodel "github.com/yichozy/r-orchestrator/internal/model"
-	"github.com/yichozy/r-orchestrator/internal/orm"
 	"github.com/yichozy/r-orchestrator/internal/service/task_service"
 )
 
@@ -71,16 +71,11 @@ func (r *queryResolver) GetTaskByID(ctx context.Context, tenantName string, task
 		return nil, err
 	}
 
-	return &model.Task{
-		ID:         task.ID,
-		TenantName: task.TenantName,
-		Status:     task.Status,
-		LastError:  task.LastError,
-		CreatedAt:  task.CreatedAt,
-		StartedAt:  task.StartedAt,
-		FinishedAt: task.FinishedAt,
-		ShardCount: task.ShardCount,
-	}, nil
+	var result model.Task
+	if err := utils.CopyObj(&task, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
 
 // GetTaskList is the resolver for the GetTaskList field.
@@ -97,48 +92,13 @@ func (r *queryResolver) GetTaskList(ctx context.Context, tenantName string, stat
 
 	result := make([]*model.Task, 0, len(tasks))
 	for _, task := range tasks {
-		result = append(result, &model.Task{
-			ID:         task.ID,
-			TenantName: task.TenantName,
-			Status:     task.Status,
-			LastError:  task.LastError,
-			CreatedAt:  task.CreatedAt,
-			StartedAt:  task.StartedAt,
-			FinishedAt: task.FinishedAt,
-			ShardCount: task.ShardCount,
-		})
+		var gqlTask model.Task
+		if err := utils.CopyObj(&task, &gqlTask); err != nil {
+			return nil, err
+		}
+		result = append(result, &gqlTask)
 	}
 
-	return result, nil
-}
-
-// Scripts is the resolver for the scripts field.
-func (r *taskResolver) Scripts(ctx context.Context, obj *model.Task) ([]*model.TaskScript, error) {
-	db, err := orm.GetDB()
-	if err != nil {
-		return nil, err
-	}
-	scripts, err := task_service.GetTaskScripts(ctx, db, obj.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]*model.TaskScript, len(scripts))
-	for i, s := range scripts {
-			result[i] = &model.TaskScript{
-			ScriptName:    s.ScriptName,
-			Status:        s.Status,
-		}
-		if s.OutputOSSKey != "" {
-			result[i].OutputOssKey = &s.OutputOSSKey
-			result[i].OutputSha256 = &s.OutputSHA256
-		}
-		if s.ErrorMessage != "" {
-			result[i].ErrorMessage = &s.ErrorMessage
-		}
-		result[i].StartedAt = s.StartedAt
-		result[i].FinishedAt = s.FinishedAt
-	}
 	return result, nil
 }
 
@@ -150,4 +110,3 @@ func (r *Resolver) Query() generated.QueryResolver { return &queryResolver{r} }
 
 type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
-type taskResolver struct{ *Resolver }

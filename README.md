@@ -1,238 +1,370 @@
 # r-orchestrator
 
-`r-orchestrator` 是一个面向多租户批处理场景的 `server-agent` 控制面原型。
+`r-orchestrator` 是一个多租户批处理任务编排系统，采用 server-agent 架构。用户通过 GraphQL API 提交任务（包含脚本和依赖的 zip 包），server 将任务拆分为多个 shard 并调度到 Kubernetes 上运行的 agent 执行，agent 完成后将输出上传到 OSS。
 
-当前代码基线已经具备：
+## 架构概览
 
-- 基于 `Gin + GraphQL` 的 HTTP 入口
-- 基于 `GORM` 的 PostgreSQL 持久化与 `AutoMigrate`
-- `GetTaskByID / GetTaskList / SubmitTask / CancelTask` 的 GraphQL Task 视角接口
-- 最小 `control` gRPC 协议实现：`OpenControlStream`、`FetchArtifact`
-- 最小 `tenant_service` / `agent_service` 主链路
-- `server` 进程内后台 `provisioning coordinator`，异步处理 `SCALING_AGENTS` 任务
+```
+                    GraphQL API
+                        │
+                   ┌────┴────┐
+                   │  Server  │  (Go)
+                   │          │
+                   │ gRPC     │◄──── bidirectional stream ────► Agent (Rust)
+                   │ Control  │
+                   │          │
+                   │  K8s     │──► StatefulSet per tenant
+                   │ Backend  │
+                   └────┬────┘
+                        │
+                   ┌────┴────┐
+                   │   DB    │  PostgreSQL
+                   └────┬────┘
+                        │
+                   ┌────┴────┐
+                   │  OSS    │  Aliyun OSS (bundle + output)
+                   └─────────┘
+```
+
+- **Server** (`cmd/server`): Go 服务，提供 GraphQL API、gRPC control plane、K8s agent 生命周期管理
+- **Agent** (`agent/`): Rust 二进制，通过 gRPC 双向流接收 shard 分配，下载 bundle、执行脚本、上传输出
+
+## API
+
+### HTTP 端点
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/healthz` | GET | 健康检查 |
+| `/graphql` | POST | GraphQL API |
+
+### GraphQL API
+
+#### 查询
+
+**GetTaskByID**
+
+```graphql
+query GetTaskByID($tenantName: String!, $taskID: UUID!) {
+  GetTaskByID(tenant_name: $tenantName, task_id: $taskID) {
+    id
+    status
+    last_error
+    created_at
+    started_at
+    finished_at
+    shard_count
+    shards {
+      id
+      script_name
+      status
+      output_oss_key
+      output_sha256
+      last_error
+      started_at
+      finished_at
+    }
+  }
+}
+```
+
+**GetTaskList**
+
+```graphql
+query GetTaskList($tenantName: String!, $status: String) {
+  GetTaskList(tenant_name: $tenantName, status: $status) {
+    id
+    status
+    last_error
+    created_at
+    started_at
+    finished_at
+    shard_count
+    shards {
+      id
+      script_name
+      status
+      output_oss_key
+      output_sha256
+      last_error
+      started_at
+      finished_at
+    }
+  }
+}
+```
+
+`status` 为可选参数，传入则按状态过滤（如 `"SUCCEEDED"`、`"RUNNING"` 等）。
+
+#### 变更操作
+
+**SubmitTask** — 提交批处理任务（详见下方 Bundle Zip 结构）
+
+```graphql
+mutation SubmitTask($input: SubmitTaskInput!) {
+  SubmitTask(input: $input) {
+    task_id
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "tenant_name": "my-tenant",
+    "bundle_zip": null,
+    "completion_hook_url": "https://example.com/hook"
+  }
+}
+```
+
+`bundle_zip` 字段使用 GraphQL multipart request spec 上传文件。
+
+**CancelTask**
+
+```graphql
+mutation CancelTask($tenantName: String!, $taskID: UUID!) {
+  CancelTask(tenant_name: $tenantName, task_id: $taskID) {
+    task_id
+    status
+  }
+}
+```
+
+**CreateTenant**
+
+```graphql
+mutation CreateTenant($input: CreateTenantInput!) {
+  CreateTenant(input: $input) {
+    id
+    name
+    primary_backend_name
+    max_agents
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "name": "my-tenant",
+    "primary_backend_name": "kubernetes",
+    "max_agents": 10
+  }
+}
+```
+
+### SubmitTask — Bundle Zip 结构要求
+
+提交任务时需上传一个 zip 文件（通过 GraphQL multipart `bundle_zip` 字段），zip 必须满足以下结构：
+
+```
+bundle.zip
+├── install.sh              # 必需，根目录下的安装脚本（依赖安装等）
+├── cmd/
+│   ├── run_scenario1.sh    # 必需，至少一个 .sh 脚本
+│   ├── run_scenario2.sh    # 每个脚本对应一个 shard
+│   └── run_scenario3.sh
+├── main.R                  # 可选，用户自定义文件
+├── sample.txt              # 可选，用户自定义文件
+└── ...                     # 其他任意文件和目录
+```
+
+**必填项：**
+- `install.sh` — 根目录下必须存在，agent 拉起 bundle 后会首先执行此脚本
+- `cmd/*.sh` — `cmd/` 目录下至少需要一个 `.sh` 脚本，每个脚本会创建一个独立的 shard
+
+**可选项：**
+- zip 内可包含任意其他文件和目录（数据文件、依赖库等），agent 执行脚本时工作目录为解压后的根目录
+
+**验证规则：**
+- 缺少 `install.sh` → 返回错误 `"bundle must contain install.sh at root"`
+- `cmd/` 下没有 `.sh` 文件 → 返回错误 `"bundle must contain at least one .sh script in cmd/ directory"`
+
+### Agent 执行流程与输出结构
+
+每个 shard 的执行流程：
+
+1. **下载 bundle** — agent 从 OSS 下载 bundle.zip（server 提供预签名 URL）
+2. **解压 bundle** — 解压到临时工作目录
+3. **执行 install.sh** — `bash install.sh`（可选，存在时执行）
+4. **执行 cmd/{script_name}** — `bash cmd/{script_name}.sh`，以解压根目录作为工作目录
+5. **收集输出** — 将工作目录下的 `output/` 目录打包为 zip
+6. **上传输出** — 通过预签名 URL 上传到 OSS，key 为 `r-orchestrator/tasks/{task_id}/output/{script_name}-output.zip`
+
+**脚本输出规范：**
+
+脚本执行时工作目录为 bundle 解压根目录。如果脚本需要在当前 shard 产生输出文件，应将结果写入 `output/` 子目录：
+
+```bash
+#!/bin/bash
+# cmd/run_scenario1.sh
+mkdir -p output
+# 执行计算并将结果写入 output/
+Rscript main.R --output output/result.csv
+```
+
+**最终输出文件结构（OSS）：**
+
+```
+r-orchestrator/tasks/{task_id}/
+├── bundle.zip                              # 原始上传的 bundle
+└── output/
+    ├── run_scenario1-output.zip            # shard 1 的输出（output/ 目录的 zip）
+    ├── run_scenario2-output.zip            # shard 2 的输出
+    └── run_scenario3-output.zip            # shard 3 的输出
+```
+
+每个 output zip 内部结构取决于脚本写入 `output/` 目录的内容。如果 `output/` 目录不存在，则生成空 zip。
+
+输出 zip 的 SHA256 值会记录在 shard 的 `output_sha256` 字段中，可用于完整性校验。
+
+### Completion Hook
+
+提交任务时可指定 `completion_hook_url`。任务达到终态（SUCCEEDED/FAILED）后，server 会向该 URL 发送 POST 请求：
+
+```json
+{
+  "task_id": "019...",
+  "tenant_id": "019...",
+  "status": "SUCCEEDED",
+  "last_error": "",
+  "finished_at": "2026-06-23T10:00:00Z",
+  "result_available": true
+}
+```
+
+- `result_available` 为 `true` 时表示所有 shard 输出已上传到 OSS
+- Hook 请求超时 15 秒，期望返回 2xx 状态码
+
+## 任务生命周期
+
+```
+PENDING → WAITING_FOR_AGENTS → QUEUED → RUNNING → SUCCEEDED / FAILED / CANCELLED
+```
+
+| 状态 | 说明 |
+|------|------|
+| `PENDING` | 任务已创建，等待 server 拉起 agent |
+| `WAITING_FOR_AGENTS` | server 正在通过 K8s 拉起 agent pod |
+| `QUEUED` | agent 已就绪，shard 进入可分配队列 |
+| `RUNNING` | 至少一个 shard 正在执行 |
+| `SUCCEEDED` | 所有 shard 执行成功 |
+| `FAILED` | 至少一个 shard 执行失败 |
+| `CANCELLED` | 任务被用户取消 |
+
+**Shard 状态：**
+
+```
+QUEUED → LEASED → RUNNING → SUCCEEDED / FAILED / CANCELLED
+```
+
+| 状态 | 说明 |
+|------|------|
+| `QUEUED` | 等待分配给 agent |
+| `LEASED` | 已分配给 agent，等待确认 |
+| `RUNNING` | 正在执行 |
+| `SUCCEEDED` | 执行成功，输出已上传 |
+| `FAILED` | 执行失败，可被重新分配 |
+| `CANCELLED` | 任务被取消 |
+
+## gRPC Control 协议
+
+Server 与 Agent 之间通过双向流 gRPC 通信（`proto/control.proto`）。
+
+**Agent → Server 消息：**
+- `Register` — agent 注册，携带 tenant、backend、token 信息
+- `Heartbeat` — 定期心跳，上报当前状态和正在执行的 shard
+- `ShardAccepted` — 确认接收 shard 分配
+- `ShardStarted` — shard 开始执行
+- `ShardResultReady` — shard 执行完成，上报输出 OSS key 和 SHA256
+- `ShardFailed` — shard 执行失败
+
+**Server → Agent 消息：**
+- `AssignShard` — 分配 shard，包含 bundle 预签名下载 URL 和输出预签名上传 URL
+- `CancelShard` — 取消正在执行的 shard
+- `ShardResultStored` — 服务端确认 shard 结果已持久化
+- `Drain` / `Shutdown` — 通知 agent 优雅退出
 
 ## 环境变量
 
-启动 `cmd/server` 需要以下环境变量：
+**必需：**
 
-- `AGENT_TOKEN`
-- `DB_HOST`
-- `DB_PORT`
-- `DB_USER`
-- `DB_PASSWORD`
-- `DB_NAME`
+| 变量 | 说明 |
+|------|------|
+| `CLUSTER_AGENT_TOKEN` | agent 认证 token |
 
-可选环境变量：
+**数据库：**
 
-- `SERVER_HTTP_ADDR`，默认 `:8089`
-- `SERVER_GRPC_ADDR`，默认 `:9090`
-- `SERVER_GRPC_PUBLIC_ADDR`：新拉起的 agent 用于回连 `server` 的 gRPC 地址（当 `PROVISIONING_ENABLED=true` 时通常需要）
-- `SERVER_PUBLIC_URL`
-- `PROVISIONING_ENABLED`，默认 `false`
-- `PROVISIONING_PROVIDER_KIND`，默认 `k8s`
-- `PROVISIONING_K8S_NAMESPACE`，默认 `default`
-- `PROVISIONING_K8S_KUBECONFIG_PATH`
-- `PROVISIONING_AGENT_IMAGE`，默认 `r-orchestrator/agent:latest`
-- `PROVISIONING_IDLE_TTL_SECONDS`，默认 `900`
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `DB_HOST` | PostgreSQL 主机 | — |
+| `DB_PORT` | PostgreSQL 端口 | — |
+| `DB_USER` | 数据库用户 | — |
+| `DB_PASSWORD` | 数据库密码 | — |
+| `DB_NAME` | 数据库名 | — |
 
-其中 PostgreSQL 连接串由 `internal/config` 使用 `DB_*` 变量组装。
+**Server 配置：**
 
-`cmd/server` 的加载顺序与优先级如下：
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `SERVER_HTTP_ADDR` | HTTP 监听地址 | `:8089` |
+| `SERVER_GRPC_ADDR` | gRPC 监听地址 | `:9090` |
+| `SERVER_GRPC_PUBLIC_ADDR` | agent 回连 gRPC 的公网地址 | — |
+| `SERVER_PUBLIC_URL` | server 公网 URL | — |
+| `LOG_LEVEL` | 日志级别 | `info` |
 
-- `cmd/server/main.go` 会先调用 `internal/config.LoadEnvVariable()`，再调用 `internal/config.LoadFromEnv()`
-- 当 `ENV=prod` 时，跳过 `.env` 加载
-- 当 `ENV` 不是 `prod` 时，会尝试加载当前目录或上层目录中的 `.env`
-- 若 `.env` 缺失，会继续使用当前进程环境变量，不把缺失 `.env` 视为启动错误
-- 若显式环境变量与 `.env` 同时提供同名键，以显式环境变量为准
-- 若 `.env` 读取遇到非“文件不存在”的 I/O 错误，则启动失败
+**K8s 后端：**
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `CLUSTER_KUBERNETES_NAMESPACE` | K8s 命名空间 | `r-agents` |
+| `CLUSTER_KUBERNETES_KUBECONFIG_PATH` | kubeconfig 路径 | — |
+| `CLUSTER_KUBERNETES_IMAGE_PULL_SECRETS` | 镜像拉取密钥（JSON 数组） | — |
+| `CLUSTER_AGENT_IMAGE` | agent 镜像 | `r-orchestrator/agent:latest` |
+| `CLUSTER_AGENT_LOG_LEVEL` | agent 日志级别 | `info` |
+
+**Agent 配置（注入到 pod 环境变量）：**
+
+| 变量 | 说明 |
+|------|------|
+| `RORCHESTRATOR_SERVER_GRPC_ADDR` | server gRPC 地址 |
+| `RORCHESTRATOR_TENANT_ID` | 所属租户 ID |
+| `RORCHESTRATOR_BACKEND_NAME` | 后端名称 |
+| `RORCHESTRATOR_AGENT_TOKEN` | 认证 token |
+| `RUST_LOG` | Rust 日志级别 |
 
 ## 本地启动
 
 ```bash
+# 启动 server
 go run ./cmd/server
-```
 
-当前 `cmd/server/main.go` 会：
-
-- 先按上述规则尝试加载 `.env`
-- 读取配置
-- 打开 PostgreSQL 连接
-- 执行 `AutoMigrate`
-- 构造 `provisioning_service` 的 SkyPilot HTTP 配置，并在同一进程内启动后台 `provisioning loop`
-- 启动 gRPC control 服务
-- 启动 HTTP 服务
-
-## HTTP 入口
-
-- 健康检查：`GET /healthz`
-- GraphQL：`POST /graphql`
-
-当前 `cmd/server/main.go` 直接挂载 `gqlgen` handler，没有额外 playground 路由。
-
-## SkyPilot Provisioning
-
-当前 SkyPilot 集成的主运行链路已经收敛为独立 server 模式：
-
-- `r-orchestrator` 不再本地执行 `sky launch` CLI
-- `internal/service/provisioning_service` 会读取 `SKYPILOT_TASK_TEMPLATE` 指向的本地模板文件
-- 模板文件内容会原样作为 `/launch` 请求体中的 `task`
-- `RORCHESTRATOR_TENANT_ID`、`RORCHESTRATOR_SERVER_GRPC_ADDR`、`RORCHESTRATOR_AGENT_TOKEN`、`RORCHESTRATOR_BACKEND_NAME` 会通过 `/launch` 请求体中的 `env_vars` 注入
-- `SKYPILOT_SERVER_URL` 用于指定独立部署的 SkyPilot server 根地址，当前主链路只依赖 `POST /launch`
-
-补充说明：
-
-- agent 副本数通过 task template 中的 `__RORCHESTRATOR_NUM_NODES__` 占位符渲染到 `num_nodes`（而不是通过额外的 env var）
-
-补充说明：
-
-- 历史 `internal/backends/skypilot` CLI / adapter legacy 文件已删除
-- 当前 provisioning 主路径只保留独立 SkyPilot server 集成，不再走本地 `sky launch`
-
-## GraphQL 主入口
-
-当前 GraphQL schema 位于：
-
-- `graph/schema/task.graphqls`
-
-当前对外只保留 4 个 Task 视角 API：
-
-- Query：`GetTaskByID`
-- Query：`GetTaskList`
-- Mutation：`SubmitTask`
-- Mutation：`CancelTask`
-
-当前 `Task` DTO 只暴露以下字段：
-
-- `id`
-- `tenant_id`
-- `status`
-- `backend_name`
-- `last_error`
-
-其中：
-
-- `id`、`task_id` 使用 `scalar UUID`，在 gqlgen 中映射到 `github.com/google/uuid.UUID`
-- `Shard` 仍存在于内部调度与持久化层，但不再作为 GraphQL 对外概念暴露
-- 历史上曾短暂使用 `Run / BatchRun` 术语，但当前不再作为对外接口语义保留
-
-正式设计文档：
-
-- `docs/superpowers/specs/` 下的 task architecture 设计稿
-
-## Control 协议
-
-控制面协议定义位于：
-
-- `proto/control.proto`
-
-当前主路径为 gRPC service：
-
-- `rorchestrator.control.v1.ControlService/OpenControlStream`
-- `rorchestrator.control.v1.ControlService/FetchArtifact`
-
-当前最小实现位于：
-
-- `internal/control/server.go`
-
-其中：
-
-- `OpenControlStream` 处理 `Register`、`Heartbeat`
-- `OpenControlStream` 在 agent 可派发 shard 时下发 `AssignShard`
-- `FetchArtifact` 按 `artifact_id` 流式返回 PostgreSQL 中保存的 artifact 内容
-- `AssignShard.batch_run_id` 为历史 proto 字段名，但当前承载的是任务 ID
-
-## 任务生命周期
-
-当前任务状态机会经过以下主阶段：
-
-- `PROVISIONING`：任务元数据、输入工件与 shard 工件落库
-- `SCALING_AGENTS`：`server` 后台 loop 正在通过 SkyPilot server 的 HTTP `/launch` 拉起 agent
-- `WAITING_FOR_AGENTS`：扩容请求已发出，等待 agent 回连并进入可派发态
-- `QUEUED`：control 已确认任务进入可派发队列
-- `RUNNING`：至少一个 shard 已开始执行
-- `SUCCEEDED / FAILED / CANCELLED`：任务终态
-
-任务创建与派发的关键约束：
-
-- `Task` 先入库，再进入 `PROVISIONING`
-- 输入工件与 shard 工件落库完成后先进入 `SCALING_AGENTS`
-- `server` 进程内 `provisioning coordinator` 异步推进 `SCALING_AGENTS -> WAITING_FOR_AGENTS`
-- `submitTask` 不会同步阻塞等待 agent 扩容完成
-- 当前主调用链里，agent 真正可派发并收到 `AssignShard` 前，任务不会直接跳过准备阶段
-
-补充说明：
-
-- 底层 helper `MarkTaskQueued()` 目前仍接受 `PROVISIONING`、`SCALING_AGENTS`、`WAITING_FOR_AGENTS` 作为可入 `QUEUED` 的前置状态
-- 这是为了幂等和兼容已有调用点而保留的放宽边界，不代表主调用链鼓励绕过 `WAITING_FOR_AGENTS`
-
-## UUID 链路现状
-
-当前任务 ID 已经在主要边界上统一为 UUID：
-
-- GraphQL schema 使用 `scalar UUID`
-- gqlgen 生成的 `Task.id`、`SubmitTaskResponse.task_id`、`CancelTaskPayload.task_id` 都是 `uuid.UUID`
-- `task_service` 的 `TaskView.ID` 与 `SubmitTask` 返回值使用 `uuid.UUID`
-- 持久化层的 `model.Task.ID`、`model.Artifact.TaskID`、`model.Shard.TaskID` 都使用 `uuid.UUID`
-
-`internal/model/base_uuid.go` 中的 `BaseUUIDModel` 提供了统一的 UUID 主键和 `BeforeCreate` 自动生成逻辑，适用于标准 `id/created_at/updated_at/deleted_at` 形态的 UUID-native model。当前 `Task` 没有嵌入它，而是继续保留自己的业务时间字段 `submitted_at/started_at/finished_at`，但任务 ID 链路已经与 `BaseUUIDModel` 使用同一套 `uuid.UUID` 语义。
-
-## 当前残余风险
-
-- `provisioning coordinator` 现在是 `cmd/server` 进程内 loop，并依赖 `Service.mu` 做单实例串行
-- 这能避免同一进程内的并发重复扩容，但还不能解决多 `server` 实例同时扫描 `SCALING_AGENTS` 任务时的跨实例竞争
-- 因此 provisioning 的跨实例竞争仍是当前残余风险，后续若演进到多实例部署，需要补上分布式 lease 或等价 fencing 机制
-
-## 测试与构建
-
-```bash
+# 运行测试
 go test ./...
-go build ./...
+cargo test -p agent
 ```
 
-最近一次本地验证使用了显式工具路径：
+## 部署
 
-- `env PATH="/usr/local/go/bin:$PATH" /usr/local/go/bin/go test ./...`
-- `env PATH="/usr/local/go/bin:$PATH" /usr/local/go/bin/go build ./...`
-- `/opt/homebrew/bin/helm template r-orchestrator ./chart/r-orchestrator`
+项目包含 Helm chart（`chart/r-orchestrator/`），通过 GitHub Actions（`.github/workflows/dev.yml`）构建镜像并部署：
 
-## GitHub Actions Dev Workflow
-
-The repository includes a development workflow at `.github/workflows/dev.yml`.
-
-Current behavior:
-
-- Triggers on `push` of release tag `vX.Y.Z`
-- Uses workflow-level `concurrency` to serialize dev deployments for the same ref and cancel superseded runs
-- Runs `go test ./...`
-- Runs `cargo test -p agent`
-- Builds and pushes two images:
-  - `r-orchestrator:${GITHUB_REF_NAME}`
-  - `r-agent:${GITHUB_REF_NAME}`
-- Updates the `server` container in deployment `r-orchestrator` under namespace `yi-dev`
-
-Required GitHub repository secrets:
-
-- `ALIYUN_REGISTRY_USERNAME`
-- `ALIYUN_REGISTRY_PASSWORD`
-- `KUBE_CONFIG`
-
-Required GitHub repository variables:
-
-- `ALIYUN_REGISTRY_SG`
-- `ALIYUN_REGISTRY_SG_VPC`
-
-Notes:
-
-- The workflow only updates the Kubernetes deployment image for the server.
-- The agent image is published, but the current chart values and `skypilot-task.yaml` template are not automatically rewritten to consume that new image in this first version.
+- 触发条件：push release tag `vX.Y.Z`
+- 构建镜像：`r-orchestrator:{tag}`（server）+ `r-agent:{tag}`（agent）
+- 部署目标：K8s namespace `yi-dev`
 
 ## 关键目录
 
-- `cmd/server`：服务启动入口
-- `graph`：GraphQL schema 与 resolver
-- `internal/model`：持久化模型
-- `internal/orm`：GORM 查询与写入
-- `internal/service/task_service`：任务提交、查询、取消
-- `internal/service/tenant_service`：租户后端解析与 quota 检查
-- `internal/service/agent_service`：agent 注册、心跳与选择
-- `internal/control`：gRPC 控制面边界
+| 目录 | 说明 |
+|------|------|
+| `cmd/server/` | 服务启动入口 |
+| `graph/` | GraphQL schema 与 resolver |
+| `internal/model/` | 持久化模型（Task, TaskShard, Cluster, Agent 等） |
+| `internal/orm/` | GORM 数据访问层 |
+| `internal/service/task_service/` | 任务提交、查询、取消、状态管理 |
+| `internal/service/agent_service/` | agent 注册与心跳 |
+| `internal/service/cluster_service/` | K8s agent 生命周期管理（拉起、回收） |
+| `internal/control/` | gRPC 控制面（shard 分配、消息路由） |
+| `agent/` | Rust agent（gRPC 客户端、执行器、OSS 上传） |
+| `proto/` | gRPC protobuf 定义 |
+| `chart/` | Helm chart |
