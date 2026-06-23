@@ -28,6 +28,7 @@ jobs:
       - name: Build server image
         run: >
           DOCKER_BUILDKIT=1 docker build
+          --build-arg GITHUB_TOKEN=${{ secrets.GH_PACKAGES_TOKEN }}
           --file ./Dockerfile.server
           --tag ${{ env.IMG_ALIYUN_REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/${{ env.SERVER_IMAGE_NAME }}:${{ env.VERSION }}
           .
