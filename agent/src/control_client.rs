@@ -98,17 +98,25 @@ pub async fn run_callback_loop(
         heartbeat_interval_secs.max(1),
     ));
 
-    if initial_status.0 == "RESULT_READY" && !initial_status.1.is_empty() {
-        tx.send(controlv1::AgentMessage {
-            payload: Some(controlv1::agent_message::Payload::Heartbeat(
-                controlv1::Heartbeat {
-                    agent_id: agent_id.clone(),
-                    status: initial_status.0,
-                    current_shard_id: initial_status.1,
-                },
-            )),
-        })
-        .await?;
+    // On reconnect, if there's a pending result (output uploaded but not yet
+    // acknowledged), re-send ShardResultReady so the server can record it.
+    // Clear the pending state so the agent can accept new assignments — the
+    // server resets reconnecting agents to IDLE regardless.
+    {
+        let mut pending = pending_result.lock().await;
+        if let Some((shard_id, output_oss_key, sha256)) = pending.take() {
+            tracing::info!(shard_id = %shard_id, "re-sending pending ShardResultReady on reconnect");
+            tx.send(controlv1::AgentMessage {
+                payload: Some(controlv1::agent_message::Payload::ShardResultReady(
+                    controlv1::ShardResultReady {
+                        shard_id,
+                        output_oss_key,
+                        sha256,
+                    },
+                )),
+            })
+            .await?;
+        }
     }
 
     loop {
@@ -257,7 +265,7 @@ pub async fn run_callback_loop(
                                     Ok(crate::executor::ExecutionOutcome::ResultReady { shard_id, output_oss_key, sha256 }) => {
                                         let set_ready_result = {
                                             let mut pending = exec_pending_result.lock().await;
-                                            pending.set_ready(shard_id.clone())
+                                            pending.set_ready(shard_id.clone(), output_oss_key.clone(), sha256.clone())
                                         };
                                         if let Err(err) = set_ready_result {
                                             tracing::error!(shard_id = %exec_shard_id, error = %err, "failed to store pending result");
@@ -283,14 +291,9 @@ pub async fn run_callback_loop(
                                             return;
                                         }
 
-                                        set_status_if_current_shard(
-                                            &exec_status,
-                                            &exec_shard_id,
-                                            "RESULT_READY",
-                                            &shard_id,
-                                        )
-                                        .await;
-
+                                        // Keep status as RUNNING — the shard is still
+                                        // RUNNING from the server's perspective until
+                                        // ShardResultReady is processed and acknowledged.
                                         let _ = exec_tx
                                             .send(controlv1::AgentMessage {
                                                 payload: Some(
@@ -327,7 +330,12 @@ pub async fn run_callback_loop(
                             tracing::info!(shard_id = %stored.shard_id, "server acknowledged stored shard result");
                             {
                                 let mut pending = pending_result.lock().await;
-                                pending.mark_stored(&stored.shard_id)?;
+                                if let Err(e) = pending.mark_stored(&stored.shard_id) {
+                                    // Pending result may have been cleared on reconnect
+                                    // after re-sending ShardResultReady. The ack is stale —
+                                    // safe to ignore since the result was already processed.
+                                    tracing::debug!(shard_id = %stored.shard_id, error = %e, "ShardResultStored with no pending result, ignoring");
+                                }
                             }
                             set_status_if_current_shard(&status, &stored.shard_id, "IDLE", "").await;
                         }
