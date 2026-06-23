@@ -39,10 +39,17 @@ cluster:
   agentToken: ""
   agentImage: ""
   agentLogLevel: "info"
-  agentParallelism: "2"
   kubernetes:
     enabled: true
     namespace: r-agents
     kubeConfigPath: ""
     imagePullSecrets: []
     #  - name: aliyun-registry
+
+oss:
+  endpoint: ""
+  accessKeySecret:
+    name: aliyun-oss
+    key: ALIYUN_OSS_ACCESS_KEY
+    secretKey: ALIYUN_OSS_ACCESS_SECRET
+  bucket: ""
