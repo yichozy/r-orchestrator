@@ -10,3 +10,4 @@ target/
 agent/target/
 /server
 *.values.yaml
+chart/r-orchestrator.values.yaml

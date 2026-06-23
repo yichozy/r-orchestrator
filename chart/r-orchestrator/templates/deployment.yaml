@@ -83,19 +83,25 @@ spec:
               value: {{ .Values.cluster.kubernetes.kubeConfigPath | quote }}
             # --- OSS ---
             - name: ALIYUN_OSS_ENDPOINT
-              value: {{ .Values.oss.endpoint | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oss.secretName }}
+                  key: {{ .Values.oss.endpointKey }}
             - name: ALIYUN_OSS_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.oss.accessKeySecret.name | default (include "r-orchestrator.fullname" .) }}
-                  key: {{ .Values.oss.accessKeySecret.key | default "ALIYUN_OSS_ACCESS_KEY" }}
+                  name: {{ .Values.oss.secretName }}
+                  key: {{ .Values.oss.accessKeyKey }}
             - name: ALIYUN_OSS_ACCESS_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.oss.accessKeySecret.name | default (include "r-orchestrator.fullname" .) }}
-                  key: {{ .Values.oss.accessKeySecret.secretKey | default "ALIYUN_OSS_ACCESS_SECRET" }}
+                  name: {{ .Values.oss.secretName }}
+                  key: {{ .Values.oss.accessSecretKey }}
             - name: ALIYUN_OSS_BUCKET
-              value: {{ .Values.oss.bucket | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oss.secretName }}
+                  key: {{ .Values.oss.bucketKey }}
           ports:
             - name: http
               containerPort: {{ .Values.service.httpPort }}

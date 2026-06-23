@@ -47,9 +47,8 @@ cluster:
     #  - name: aliyun-registry
 
 oss:
-  endpoint: ""
-  accessKeySecret:
-    name: aliyun-oss
-    key: ALIYUN_OSS_ACCESS_KEY
-    secretKey: ALIYUN_OSS_ACCESS_SECRET
-  bucket: ""
+  secretName: aliyun-oss
+  endpointKey: ALIYUN_OSS_ENDPOINT
+  accessKeyKey: ALIYUN_OSS_ACCESS_KEY
+  accessSecretKey: ALIYUN_OSS_ACCESS_SECRET
+  bucketKey: ALIYUN_OSS_BUCKET
