@@ -94,10 +94,6 @@ func TestLoadFromEnvLoadsAgentSettings(t *testing.T) {
 	t.Setenv("SERVER_GRPC_PUBLIC_ADDR", "server.default.svc.cluster.local:9090")
 	t.Setenv("CLUSTER_BILLING_CYCLE_SECONDS", "7200")
 	t.Setenv("CLUSTER_AGENT_LOG_LEVEL", "debug")
-	t.Setenv("ALIYUN_OSS_ENDPOINT", "oss-cn-hongkong.aliyuncs.com")
-	t.Setenv("ALIYUN_OSS_BUCKET", "test-bucket")
-	t.Setenv("ALIYUN_OSS_ACCESS_KEY", "test-ak")
-	t.Setenv("ALIYUN_OSS_ACCESS_SECRET", "test-sk")
 	t.Setenv("LOG_LEVEL", "debug")
 
 	cfg, err := LoadFromEnv()
@@ -121,18 +117,6 @@ func TestLoadFromEnvLoadsAgentSettings(t *testing.T) {
 	}
 	if cfg.Cluster.AgentLogLevel != "debug" {
 		t.Fatalf("unexpected agent log level: %q", cfg.Cluster.AgentLogLevel)
-	}
-	if cfg.Cluster.OSS.Endpoint != "oss-cn-hongkong.aliyuncs.com" {
-		t.Fatalf("unexpected oss endpoint: %q", cfg.Cluster.OSS.Endpoint)
-	}
-	if cfg.Cluster.OSS.Bucket != "test-bucket" {
-		t.Fatalf("unexpected oss bucket: %q", cfg.Cluster.OSS.Bucket)
-	}
-	if cfg.Cluster.OSS.AccessKey != "test-ak" {
-		t.Fatalf("unexpected oss access key: %q", cfg.Cluster.OSS.AccessKey)
-	}
-	if cfg.Cluster.OSS.AccessSecret != "test-sk" {
-		t.Fatalf("unexpected oss access secret: %q", cfg.Cluster.OSS.AccessSecret)
 	}
 	if cfg.Server.LogLevel != "debug" {
 		t.Fatalf("unexpected server log level: %q", cfg.Server.LogLevel)

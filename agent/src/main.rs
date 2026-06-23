@@ -81,12 +81,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Ok(client) => {
                 tracing::info!(server_addr = %cfg.server_grpc_addr, "connected to server");
 
-                let oss_config = oss::OSSConfig::from_env();
-
                 backoff_secs = cfg.reconnect_initial_backoff_secs.max(1);
                 let result = control_client::run_callback_loop(
                     client,
-                    oss_config,
                     cfg.agent_id.clone(),
                     cfg.tenant_id.clone(),
                     cfg.backend_name.clone(),

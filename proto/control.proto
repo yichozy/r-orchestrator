@@ -47,9 +47,10 @@ message AssignShard {
   string shard_id = 1;
   string task_id = 2;
   string script_name = 3;
-  string bundle_oss_key = 4;
-  string output_oss_prefix = 5;
-  int32 total_shards = 6;
+  string bundle_download_url = 4;
+  string output_upload_url = 5;
+  string output_oss_key = 6;
+  int32 total_shards = 7;
 }
 
 message Drain {}

@@ -43,10 +43,6 @@ func (p *K8sProvider) ProvisionCluster(ctx context.Context, tenant model.Tenant)
 		{Name: "RORCHESTRATOR_BACKEND_NAME", Value: "kubernetes"},
 		{Name: "RORCHESTRATOR_HEALTH_PORT", Value: "9091"},
 		{Name: "RUST_LOG", Value: p.cfg.AgentLogLevel},
-		{Name: "ALIYUN_OSS_ENDPOINT", Value: p.cfg.OSS.Endpoint},
-		{Name: "ALIYUN_OSS_BUCKET", Value: p.cfg.OSS.Bucket},
-		{Name: "ALIYUN_OSS_ACCESS_KEY", Value: p.cfg.OSS.AccessKey},
-		{Name: "ALIYUN_OSS_ACCESS_SECRET", Value: p.cfg.OSS.AccessSecret},
 	}
 	if p.cfg.ServerPublicURL != "" {
 		envs = append(envs, corev1.EnvVar{

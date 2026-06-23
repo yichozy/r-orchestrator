@@ -42,18 +42,18 @@ pub fn cache_dir() -> PathBuf {
 }
 
 pub async fn execute_shard(
-    oss_config: &oss::OSSConfig,
+    bundle_download_url: &str,
+    output_upload_url: &str,
+    output_oss_key: &str,
     shard_id: &str,
     script_name: &str,
-    bundle_oss_key: &str,
-    output_oss_prefix: &str,
     cancel_token: &crate::control_client::CancelToken,
 ) -> Result<ExecutionOutcome, Box<dyn std::error::Error + Send + Sync>> {
-    // Phase 1: Download bundle from OSS
-    tracing::info!(shard_id, bundle_oss_key, "downloading bundle for shard");
+    // Phase 1: Download bundle
+    tracing::info!(shard_id, "downloading bundle for shard");
     let cache = cache_dir();
     let bundle_path = cache.join(format!("bundle-{}.zip", shard_id));
-    oss::download_file(oss_config, bundle_oss_key, &bundle_path).await?;
+    oss::download_file(bundle_download_url, &bundle_path).await?;
 
     // Phase 2: Extract bundle
     let work_dir = cache.join(format!("work-{}", shard_id));
@@ -91,7 +91,7 @@ pub async fn execute_shard(
         }
     }
 
-    // Phase 5: Run cmd/{script_name}
+    // Phase 4: Run cmd/{script_name}
     let script_path = work_dir.join("cmd").join(script_name);
     if !script_path.exists() {
         return Err(format!("script not found: {}", script_path.display()).into());
@@ -120,7 +120,7 @@ pub async fn execute_shard(
     }
     tracing::info!(shard_id, "script completed");
 
-    // Phase 6: Collect output files and create output zip
+    // Phase 5: Collect output files and create output zip
     let output_dir = work_dir.join("output");
     let output_zip_path = cache.join(format!("output-{}.zip", shard_id));
     if output_dir.exists() {
@@ -129,18 +129,17 @@ pub async fn execute_shard(
         create_empty_zip(&output_zip_path)?;
     }
 
-    // Phase 7: Compute SHA256 and upload to OSS
+    // Phase 6: Compute SHA256 and upload to OSS
     let zip_bytes = std::fs::read(&output_zip_path)?;
     let sha256 = sha256_hex(&zip_bytes);
 
-    let output_oss_key = format!("{}{}-output.zip", output_oss_prefix, script_name);
-    oss::upload_file(oss_config, &output_zip_path, &output_oss_key).await?;
+    oss::upload_file(output_upload_url, &output_zip_path).await?;
 
-    // Phase 8: Return result
+    // Phase 7: Return result
     tracing::info!(shard_id, %output_oss_key, sha256, "shard execution finished");
     Ok(ExecutionOutcome::ResultReady {
         shard_id: shard_id.to_string(),
-        output_oss_key,
+        output_oss_key: output_oss_key.to_string(),
         sha256,
     })
 }

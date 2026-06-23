@@ -76,12 +76,6 @@ func main() {
 		ServerPublicURL:  cfg.Server.PublicURL,
 		KubeConfigPath:   cfg.Cluster.Kubernetes.KubeConfigPath,
 		AgentLogLevel: cfg.Cluster.AgentLogLevel,
-		OSS: k8s_backend.OSSPodConfig{
-			Endpoint:     cfg.Cluster.OSS.Endpoint,
-			Bucket:       cfg.Cluster.OSS.Bucket,
-			AccessKey:    cfg.Cluster.OSS.AccessKey,
-			AccessSecret: cfg.Cluster.OSS.AccessSecret,
-		},
 	})
 	if err != nil {
 		logger.Error("create k8s backend provider", zap.Error(err))

@@ -5,7 +5,9 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	aliyun "github.com/yichozy/hopebox/aliyun"
 	"github.com/yichozy/r-orchestrator/internal/service/agent_service"
+	ossSDK "github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/yichozy/r-orchestrator/internal/service/task_service"
 	controlv1 "github.com/yichozy/r-orchestrator/proto"
 	"go.uber.org/zap"
@@ -54,15 +56,34 @@ func (server *Server) TryAssignShard(sess *agentSession) (ret_err error) {
 		return status.Errorf(codes.Internal, "mark agent busy: %v", err)
 	}
 
+	// Generate pre-signed URLs for bundle download and output upload.
+	ossClient, err := aliyun.NewOss()
+	if err != nil {
+		return status.Errorf(codes.Internal, "init oss client: %v", err)
+	}
+
+	bundleKey := fmt.Sprintf("r-orchestrator/tasks/%s/bundle.zip", task.ID)
+	bundleURL, err := ossClient.GetObjectURL(sess.Context(), bundleKey)
+	if err != nil {
+		return status.Errorf(codes.Internal, "sign bundle url: %v", err)
+	}
+
+	outputKey := fmt.Sprintf("r-orchestrator/tasks/%s/output/%s-output.zip", task.ID, shard.ScriptName)
+	outputURL, err := ossClient.Bucket.SignURL(outputKey, ossSDK.HTTPPut, 3600)
+	if err != nil {
+		return status.Errorf(codes.Internal, "sign output url: %v", err)
+	}
+
 	if err := sess.Send(&controlv1.ServerMessage{
 		Payload: &controlv1.ServerMessage_AssignShard{
 			AssignShard: &controlv1.AssignShard{
-				ShardId:          shard.ID.String(),
-				TaskId:           task.ID.String(),
-				ScriptName:       shard.ScriptName,
-				BundleOssKey:     fmt.Sprintf("r-orchestrator/tasks/%s/bundle.zip", task.ID),
-				OutputOssPrefix:  fmt.Sprintf("r-orchestrator/tasks/%s/output/", task.ID),
-				TotalShards:      int32(task.ShardCount),
+				ShardId:           shard.ID.String(),
+				TaskId:            task.ID.String(),
+				ScriptName:        shard.ScriptName,
+				BundleDownloadUrl: bundleURL,
+				OutputUploadUrl:    outputURL,
+				OutputOssKey:      outputKey,
+				TotalShards:       int32(task.ShardCount),
 			},
 		},
 	}); err != nil {

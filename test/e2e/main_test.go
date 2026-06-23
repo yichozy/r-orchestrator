@@ -78,12 +78,6 @@ func TestMain(m *testing.M) {
 		ServerPublicURL:  cfg.Server.PublicURL,
 		KubeConfigPath:   cfg.Cluster.Kubernetes.KubeConfigPath,
 		AgentLogLevel: cfg.Cluster.AgentLogLevel,
-		OSS: k8s_backend.OSSPodConfig{
-			Endpoint:     cfg.Cluster.OSS.Endpoint,
-			Bucket:       cfg.Cluster.OSS.Bucket,
-			AccessKey:    cfg.Cluster.OSS.AccessKey,
-			AccessSecret: cfg.Cluster.OSS.AccessSecret,
-		},
 	})
 	if err != nil {
 		log.Fatalf("create k8s provider: %v", err)

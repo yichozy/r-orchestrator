@@ -58,7 +58,6 @@ pub async fn connect(
 
 pub async fn run_callback_loop(
     mut client: controlv1::control_service_client::ControlServiceClient<Channel>,
-    oss_config: crate::oss::OSSConfig,
     agent_id: String,
     tenant_id: String,
     backend_name: String,
@@ -175,9 +174,9 @@ pub async fn run_callback_loop(
                             let exec_tx = tx.clone();
                             let exec_shard_id = assign.shard_id.clone();
                             let exec_script_name = assign.script_name.clone();
-                            let exec_bundle_oss_key = assign.bundle_oss_key.clone();
-                            let exec_output_oss_prefix = assign.output_oss_prefix.clone();
-                            let exec_oss_config = oss_config.clone();
+                            let exec_bundle_url = assign.bundle_download_url.clone();
+                            let exec_output_url = assign.output_upload_url.clone();
+                            let exec_output_key = assign.output_oss_key.clone();
                             let exec_status = status.clone();
                             let exec_pending_result = pending_result.clone();
                             let exec_cancel_tokens = cancel_tokens.clone();
@@ -196,11 +195,11 @@ pub async fn run_callback_loop(
 
                             tokio::spawn(async move {
                                 let result = crate::executor::execute_shard(
-                                    &exec_oss_config,
+                                    &exec_bundle_url,
+                                    &exec_output_url,
+                                    &exec_output_key,
                                     &exec_shard_id,
                                     &exec_script_name,
-                                    &exec_bundle_oss_key,
-                                    &exec_output_oss_prefix,
                                     &cancel_token,
                                 )
                                 .await;

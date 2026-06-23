@@ -434,15 +434,16 @@ func (x *Heartbeat) GetCurrentShardId() string {
 }
 
 type AssignShard struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	ShardId         string                 `protobuf:"bytes,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	TaskId          string                 `protobuf:"bytes,2,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	ScriptName      string                 `protobuf:"bytes,3,opt,name=script_name,json=scriptName,proto3" json:"script_name,omitempty"`
-	BundleOssKey    string                 `protobuf:"bytes,4,opt,name=bundle_oss_key,json=bundleOssKey,proto3" json:"bundle_oss_key,omitempty"`
-	OutputOssPrefix string                 `protobuf:"bytes,5,opt,name=output_oss_prefix,json=outputOssPrefix,proto3" json:"output_oss_prefix,omitempty"`
-	TotalShards     int32                  `protobuf:"varint,6,opt,name=total_shards,json=totalShards,proto3" json:"total_shards,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	ShardId           string                 `protobuf:"bytes,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
+	TaskId            string                 `protobuf:"bytes,2,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	ScriptName        string                 `protobuf:"bytes,3,opt,name=script_name,json=scriptName,proto3" json:"script_name,omitempty"`
+	BundleDownloadUrl string                 `protobuf:"bytes,4,opt,name=bundle_download_url,json=bundleDownloadUrl,proto3" json:"bundle_download_url,omitempty"`
+	OutputUploadUrl   string                 `protobuf:"bytes,5,opt,name=output_upload_url,json=outputUploadUrl,proto3" json:"output_upload_url,omitempty"`
+	OutputOssKey      string                 `protobuf:"bytes,6,opt,name=output_oss_key,json=outputOssKey,proto3" json:"output_oss_key,omitempty"`
+	TotalShards       int32                  `protobuf:"varint,7,opt,name=total_shards,json=totalShards,proto3" json:"total_shards,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *AssignShard) Reset() {
@@ -496,16 +497,23 @@ func (x *AssignShard) GetScriptName() string {
 	return ""
 }
 
-func (x *AssignShard) GetBundleOssKey() string {
+func (x *AssignShard) GetBundleDownloadUrl() string {
 	if x != nil {
-		return x.BundleOssKey
+		return x.BundleDownloadUrl
 	}
 	return ""
 }
 
-func (x *AssignShard) GetOutputOssPrefix() string {
+func (x *AssignShard) GetOutputUploadUrl() string {
 	if x != nil {
-		return x.OutputOssPrefix
+		return x.OutputUploadUrl
+	}
+	return ""
+}
+
+func (x *AssignShard) GetOutputOssKey() string {
+	if x != nil {
+		return x.OutputOssKey
 	}
 	return ""
 }
@@ -906,15 +914,16 @@ const file_proto_control_proto_rawDesc = "" +
 	"\tHeartbeat\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12(\n" +
-	"\x10current_shard_id\x18\x03 \x01(\tR\x0ecurrentShardId\"\xd7\x01\n" +
+	"\x10current_shard_id\x18\x03 \x01(\tR\x0ecurrentShardId\"\x87\x02\n" +
 	"\vAssignShard\x12\x19\n" +
 	"\bshard_id\x18\x01 \x01(\tR\ashardId\x12\x17\n" +
 	"\atask_id\x18\x02 \x01(\tR\x06taskId\x12\x1f\n" +
 	"\vscript_name\x18\x03 \x01(\tR\n" +
-	"scriptName\x12$\n" +
-	"\x0ebundle_oss_key\x18\x04 \x01(\tR\fbundleOssKey\x12*\n" +
-	"\x11output_oss_prefix\x18\x05 \x01(\tR\x0foutputOssPrefix\x12!\n" +
-	"\ftotal_shards\x18\x06 \x01(\x05R\vtotalShards\"\a\n" +
+	"scriptName\x12.\n" +
+	"\x13bundle_download_url\x18\x04 \x01(\tR\x11bundleDownloadUrl\x12*\n" +
+	"\x11output_upload_url\x18\x05 \x01(\tR\x0foutputUploadUrl\x12$\n" +
+	"\x0eoutput_oss_key\x18\x06 \x01(\tR\foutputOssKey\x12!\n" +
+	"\ftotal_shards\x18\a \x01(\x05R\vtotalShards\"\a\n" +
 	"\x05Drain\"\n" +
 	"\n" +
 	"\bShutdown\"(\n" +
