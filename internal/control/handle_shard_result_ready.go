@@ -16,8 +16,25 @@ func (server *Server) HandleShardResultReady(sess *agentSession, shard_ready *co
 	if err != nil {
 		return status.Errorf(codes.InvalidArgument, "invalid shard_id: %v", err)
 	}
-	if err := task_service.ValidateShardReport(sess.Context(), shardID, sess.agentID, sess.tenantID, sess.backend, model.ShardStatusRunning, "mark shard result ready"); err != nil {
+
+	shard, err := task_service.LoadValidatedShard(sess.Context(), shardID, sess.agentID, sess.tenantID, sess.backend)
+	if err != nil {
 		return err
+	}
+
+	// Idempotent: shard already SUCCEEDED means the original ShardResultReady
+	// was processed but the ack was lost (e.g. agent reconnected). Re-send the
+	// ack and reset to IDLE instead of rejecting and terminating the stream.
+	if shard.Status == model.ShardStatusSucceeded {
+		server.logger.Info("shard already succeeded, re-sending ack",
+			zap.String("agent_id", sess.agentID),
+			zap.Stringer("shard_id", shardID),
+		)
+		return server.ackShardResultAndReset(sess, shardID)
+	}
+
+	if shard.Status != model.ShardStatusRunning {
+		return status.Errorf(codes.FailedPrecondition, "mark shard result ready requires shard %s to be %s, got %s", shardID, model.ShardStatusRunning, shard.Status)
 	}
 
 	// Agent uploaded output to OSS. Record OSS key and mark shard SUCCEEDED.
@@ -36,7 +53,12 @@ func (server *Server) HandleShardResultReady(sess *agentSession, shard_ready *co
 		zap.String("output_oss_key", shard_ready.GetOutputOssKey()),
 	)
 
-	// Send ack and reset agent.
+	return server.ackShardResultAndReset(sess, shardID)
+}
+
+// ackShardResultAndReset sends the ShardResultStored ack, resets the agent to
+// IDLE, and tries to assign the next shard.
+func (server *Server) ackShardResultAndReset(sess *agentSession, shardID uuid.UUID) error {
 	if err := sess.Send(&controlv1.ServerMessage{Payload: &controlv1.ServerMessage_ShardResultStored{ShardResultStored: &controlv1.ShardResultStored{ShardId: shardID.String()}}}); err != nil {
 		return err
 	}
