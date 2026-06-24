@@ -93,6 +93,10 @@ pub async fn execute_shard(
         return Ok(ExecutionOutcome::Cancelled);
     }
 
+    // Touch access marker so the periodic cleanup doesn't remove a work
+    // directory that still has pending shards.
+    let _ = std::fs::write(work_dir.join(".last-access"), b"");
+
     // Clean output directory so each shard starts fresh.
     let output_dir = work_dir.join("output");
     if output_dir.exists() {
@@ -131,6 +135,9 @@ pub async fn execute_shard(
     let sha256 = sha256_hex(&zip_bytes);
 
     oss::upload_file(output_upload_url, &output_zip_path).await?;
+
+    // Output is now in OSS — clean up the local copy.
+    let _ = std::fs::remove_file(&output_zip_path);
 
     // Phase 6: Return result.
     tracing::info!(shard_id, %output_oss_key, sha256, "shard execution finished");
@@ -233,6 +240,63 @@ fn sha256_hex(bytes: &[u8]) -> String {
 #[cfg(unix)]
 fn sanitize_unix_mode(mode: u32) -> u32 {
     mode & 0o755
+}
+
+/// Removes cache entries that haven't been modified within the TTL.
+/// Scans for bundle zips, work directories, and leftover output zips.
+pub fn cleanup_cache(ttl: std::time::Duration) {
+    let cache = cache_dir();
+    let cutoff = std::time::SystemTime::now() - ttl;
+
+    let Ok(entries) = std::fs::read_dir(&cache) else {
+        return;
+    };
+
+    let mut removed = 0;
+    for entry in entries.flatten() {
+        let Ok(meta) = entry.metadata() else {
+            continue;
+        };
+        let Ok(mtime) = meta.modified() else {
+            continue;
+        };
+        if mtime >= cutoff {
+            continue;
+        }
+        let path = entry.path();
+        let result = if meta.is_dir() {
+            std::fs::remove_dir_all(&path)
+        } else {
+            std::fs::remove_file(&path)
+        };
+        match result {
+            Ok(()) => removed += 1,
+            Err(e) => {
+                tracing::warn!(path = %path.display(), error = %e, "failed to remove stale cache entry");
+            }
+        }
+    }
+
+    if removed > 0 {
+        tracing::info!(removed, "cache cleanup completed");
+    }
+}
+
+/// Periodically removes stale cache entries. Should be spawned as a background task.
+pub async fn cleanup_cache_loop() {
+    let interval = std::time::Duration::from_secs(600); // 10 min
+    let ttl = std::time::Duration::from_secs(3600); // 1 hour
+
+    tracing::info!(
+        ?interval,
+        ?ttl,
+        "cache cleanup loop started"
+    );
+
+    loop {
+        tokio::time::sleep(interval).await;
+        cleanup_cache(ttl);
+    }
 }
 
 #[cfg(test)]

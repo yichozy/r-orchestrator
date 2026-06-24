@@ -65,6 +65,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Start health check TCP server in background
     tokio::spawn(health_server(cfg.health_port));
 
+    // Start periodic cache cleanup in background
+    tokio::spawn(executor::cleanup_cache_loop());
+
     let mut backoff_secs = cfg.reconnect_initial_backoff_secs.max(1);
     let max_backoff_secs = cfg
         .reconnect_max_backoff_secs
