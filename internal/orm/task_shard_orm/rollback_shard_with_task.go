@@ -14,12 +14,7 @@ import (
 // WAITING_FOR_AGENTS status, rolls the task back to WAITING as well. This is the
 // unified transaction used by timeout, orphan-cleanup, and lease-rollback paths.
 func RollbackShardWithTask(ctx context.Context, tx *gorm.DB, shardID uuid.UUID, currentStatuses []string, task model.Task) error {
-	if err := UpdateShardStatus(ctx, tx, UpdateShardStatusParams{
-		ShardID:         shardID,
-		Status:          model.ShardStatusQueued,
-		CurrentStatuses: currentStatuses,
-		ClearAgent:      true,
-	}); err != nil {
+	if err := RollbackToQueued(ctx, tx, shardID, currentStatuses); err != nil {
 		return err
 	}
 	if task.Status == model.TaskStatusWaitingForAgents {

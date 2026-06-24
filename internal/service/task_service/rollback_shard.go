@@ -46,12 +46,7 @@ func RollbackOrphanShardsForAgent(ctx context.Context, agentID string) (int, err
 			zap.Stringer("shard_id", shard.ID),
 			zap.String("shard_status", shard.Status),
 		)
-		if rollbackErr := task_shard_orm.UpdateShardStatus(ctx, db, task_shard_orm.UpdateShardStatusParams{
-			ShardID:         shard.ID,
-			Status:          model.ShardStatusQueued,
-			CurrentStatuses: []string{shard.Status},
-			ClearAgent:      true,
-		}); rollbackErr != nil {
+		if rollbackErr := task_shard_orm.RollbackToQueued(ctx, db, shard.ID, []string{shard.Status}); rollbackErr != nil {
 			zap.L().Named("task_service").Error("failed to roll back orphaned shard",
 				zap.Stringer("shard_id", shard.ID),
 				zap.Error(rollbackErr),

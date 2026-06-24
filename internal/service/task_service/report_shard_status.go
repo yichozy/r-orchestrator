@@ -59,25 +59,23 @@ func ReportShardStatus(ctx context.Context, params ReportShardStatusParams) erro
 			reportShardStatusAfterTaskLockHook(tx, task.ID, shard.ID)
 		}
 
-		updateParams := task_shard_orm.UpdateShardStatusParams{
-			ShardID: params.ShardID,
-			Status:  params.ShardStatus,
-		}
-
 		switch params.ShardStatus {
 		case model.ShardStatusRunning:
-			updateParams.CurrentStatuses = []string{model.ShardStatusLeased}
-			updateParams.StartedAt = &now
+			if err := task_shard_orm.MarkRunning(ctx, tx, params.ShardID); err != nil {
+				return fmt.Errorf("report shard running: %w", err)
+			}
 		case model.ShardStatusSucceeded:
-			updateParams.CurrentStatuses = []string{model.ShardStatusRunning}
+			if err := task_shard_orm.MarkSucceeded(ctx, tx, params.ShardID); err != nil {
+				return fmt.Errorf("report shard succeeded: %w", err)
+			}
 		case model.ShardStatusFailed:
-			updateParams.CurrentStatuses = []string{model.ShardStatusRunning}
-			updateParams.FinishedAt = &now
-			updateParams.LastError = params.ErrorMessage
-		}
-
-		if err := task_shard_orm.UpdateShardStatus(ctx, tx, updateParams); err != nil {
-			return fmt.Errorf("report shard %s: %w", params.ShardStatus, err)
+			errMsg := ""
+			if params.ErrorMessage != nil {
+				errMsg = *params.ErrorMessage
+			}
+			if err := task_shard_orm.MarkFailed(ctx, tx, params.ShardID, errMsg); err != nil {
+				return fmt.Errorf("report shard failed: %w", err)
+			}
 		}
 
 		if params.ShardStatus == model.ShardStatusSucceeded {

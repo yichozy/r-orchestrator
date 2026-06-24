@@ -10,71 +10,54 @@ import (
 	"gorm.io/gorm"
 )
 
-type UpdateShardStatusParams struct {
-	ShardID         uuid.UUID
-	Status          string
-	CurrentStatuses []string
-	StartedAt       *time.Time
-	FinishedAt      *time.Time
-	LastError       *string
-	AgentID         *uuid.UUID
-	ClearAgent      bool
-}
-
-func UpdateShardStatus(ctx context.Context, db *gorm.DB, p UpdateShardStatusParams) error {
-	if len(p.CurrentStatuses) == 0 {
-		p.CurrentStatuses = defaultCurrentStatusesFor(p.Status)
-	}
-
-	updates := map[string]any{
-		"status": p.Status,
-	}
-
-	if p.StartedAt != nil {
-		updates["started_at"] = *p.StartedAt
-	}
-	if p.FinishedAt != nil {
-		updates["finished_at"] = *p.FinishedAt
-	}
-	if p.LastError != nil {
-		updates["last_error"] = *p.LastError
-	}
-
-	if p.ClearAgent {
-		updates["assigned_agent_id"] = nil
-	} else if p.AgentID != nil {
-		updates["assigned_agent_id"] = *p.AgentID
-	}
-
-	query := db.WithContext(ctx).Model(&model.TaskShard{}).Where("id = ?", p.ShardID)
-	if len(p.CurrentStatuses) > 0 {
-		query = query.Where("status IN ?", p.CurrentStatuses)
-	}
-
-	result := query.Updates(updates)
+// transitionStatus atomically sets a shard to targetStatus if its current
+// status is in currentStatuses. The updates map carries additional column
+// changes. Returns a descriptive error if the status guard fails.
+func transitionStatus(ctx context.Context, db *gorm.DB, shardID uuid.UUID, targetStatus string, currentStatuses []string, updates map[string]any) error {
+	updates["status"] = targetStatus
+	result := db.WithContext(ctx).
+		Model(&model.TaskShard{}).
+		Where("id = ?", shardID).
+		Where("status IN ?", currentStatuses).
+		Updates(updates)
 	if result.Error != nil {
-		return fmt.Errorf("update shard status: %w", result.Error)
+		return fmt.Errorf("transition shard to %s: %w", targetStatus, result.Error)
 	}
-	if len(p.CurrentStatuses) > 0 && result.RowsAffected == 0 {
+	if result.RowsAffected == 0 {
 		var shard model.TaskShard
-		if err := db.WithContext(ctx).
-			Select("id", "status").
-			Where("id = ?", p.ShardID).
-			First(&shard).Error; err != nil {
-			return fmt.Errorf("update shard status: %w", err)
+		if err := db.WithContext(ctx).Select("status").Where("id = ?", shardID).First(&shard).Error; err != nil {
+			return fmt.Errorf("transition shard to %s: %w", targetStatus, err)
 		}
-		return fmt.Errorf("update shard status: shard %s is in status %s", p.ShardID, shard.Status)
+		return fmt.Errorf("transition shard to %s: shard %s is %s, expected one of %v", targetStatus, shardID, shard.Status, currentStatuses)
 	}
 	return nil
 }
 
-func defaultCurrentStatusesFor(status string) []string {
-	switch status {
-	case model.ShardStatusRunning:
-		return []string{model.ShardStatusLeased}
-	case model.ShardStatusSucceeded, model.ShardStatusFailed:
-		return []string{model.ShardStatusRunning}
-	default:
-		return nil
-	}
+// MarkRunning transitions a shard from LEASED to RUNNING.
+func MarkRunning(ctx context.Context, db *gorm.DB, shardID uuid.UUID) error {
+	return transitionStatus(ctx, db, shardID, model.ShardStatusRunning,
+		[]string{model.ShardStatusLeased},
+		map[string]any{"started_at": time.Now()})
+}
+
+// MarkSucceeded transitions a shard from RUNNING to SUCCEEDED.
+func MarkSucceeded(ctx context.Context, db *gorm.DB, shardID uuid.UUID) error {
+	return transitionStatus(ctx, db, shardID, model.ShardStatusSucceeded,
+		[]string{model.ShardStatusRunning},
+		map[string]any{"finished_at": time.Now()})
+}
+
+// MarkFailed transitions a shard from RUNNING to FAILED.
+func MarkFailed(ctx context.Context, db *gorm.DB, shardID uuid.UUID, lastError string) error {
+	return transitionStatus(ctx, db, shardID, model.ShardStatusFailed,
+		[]string{model.ShardStatusRunning},
+		map[string]any{"finished_at": time.Now(), "last_error": lastError})
+}
+
+// RollbackToQueued transitions a shard to QUEUED and clears the agent
+// assignment, guarded by currentStatuses.
+func RollbackToQueued(ctx context.Context, db *gorm.DB, shardID uuid.UUID, currentStatuses []string) error {
+	return transitionStatus(ctx, db, shardID, model.ShardStatusQueued,
+		currentStatuses,
+		map[string]any{"assigned_agent_id": nil})
 }

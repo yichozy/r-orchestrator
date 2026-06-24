@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/yichozy/r-orchestrator/internal/model"
@@ -13,45 +12,28 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestUpdateShardStatusAllowsTerminalTransitionDuringMigration(t *testing.T) {
-	tests := []struct {
-		name          string
-		initialStatus string
-	}{
-		{
-			name:          "from running",
-			initialStatus: model.ShardStatusRunning,
-		},
+func TestMarkSucceededFromRunning(t *testing.T) {
+	ctx := context.Background()
+	db := newTestDB(t)
+	taskID := uuid.Must(uuid.NewV7())
+	shardID := uuid.Must(uuid.NewV7())
+
+	mustCreateTask(t, ctx, db, taskID, model.TaskStatusRunning)
+	mustCreateTaskShardWithID(t, ctx, db, shardID, taskID, model.ShardStatusRunning)
+
+	if err := MarkSucceeded(ctx, db, shardID); err != nil {
+		t.Fatalf("MarkSucceeded() error = %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
-			db := newTestDB(t)
-			taskID := uuid.Must(uuid.NewV7())
-			shardID := uuid.Must(uuid.NewV7())
-
-			mustCreateTask(t, ctx, db, taskID, model.TaskStatusRunning)
-			mustCreateTaskShardWithID(t, ctx, db, shardID, taskID, tt.initialStatus)
-
-			now := time.Now()
-			err := UpdateShardStatus(ctx, db, UpdateShardStatusParams{
-				ShardID:    shardID,
-				Status:     model.ShardStatusSucceeded,
-				FinishedAt: &now,
-			})
-			if err != nil {
-				t.Fatalf("UpdateShardStatus() error = %v", err)
-			}
-
-			shard, err := GetByID(ctx, db, shardID)
-			if err != nil {
-				t.Fatalf("GetByID() error = %v", err)
-			}
-			if shard.Status != model.ShardStatusSucceeded {
-				t.Fatalf("shard.Status = %s, want %s", shard.Status, model.ShardStatusSucceeded)
-			}
-		})
+	shard, err := GetByID(ctx, db, shardID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if shard.Status != model.ShardStatusSucceeded {
+		t.Fatalf("shard.Status = %s, want %s", shard.Status, model.ShardStatusSucceeded)
+	}
+	if shard.FinishedAt == nil {
+		t.Fatal("FinishedAt = nil, want set")
 	}
 }
 
