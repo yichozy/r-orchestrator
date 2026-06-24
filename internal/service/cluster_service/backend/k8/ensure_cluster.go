@@ -117,7 +117,7 @@ func (p *K8sProvider) ProvisionCluster(ctx context.Context, tenant model.Tenant)
 	}
 
 	_, err = p.client.AppsV1().StatefulSets(p.cfg.Namespace).Create(ctx, sts, metav1.CreateOptions{})
-	if err != nil {
+	if err != nil && !apierrors.IsAlreadyExists(err) {
 		return fmt.Errorf("create statefulset %s: %w", sts.Name, err)
 	}
 
