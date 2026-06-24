@@ -23,11 +23,7 @@ func (server *Server) HandleShardStarted(sess *agentSession, shard_started *cont
 	if err := task_service.ReportShardStatus(sess.Context(), task_service.ReportShardStatusParams{ShardID: shardID, ShardStatus: model.ShardStatusRunning}); err != nil {
 		return status.Errorf(codes.Internal, "mark shard started: %v", err)
 	}
-	if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
-		AgentID:        sess.agentID,
-		Status:         agent_service.AgentStatusRunning,
-		CurrentShardID: &shardIDStr,
-	}); err != nil {
+	if err := agent_service.HeartbeatAgent(sess.agentID, agent_service.AgentStatusRunning, &shardIDStr); err != nil {
 		return status.Errorf(codes.Internal, "update agent running state: %v", err)
 	}
 	server.logger.Info("shard started",

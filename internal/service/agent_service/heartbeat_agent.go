@@ -5,20 +5,20 @@ import (
 	"time"
 )
 
-func HeartbeatAgent(params HeartbeatAgentParams) error {
+func HeartbeatAgent(agentID string, status string, currentShardID *string) error {
 	mu.Lock()
 	defer mu.Unlock()
 
-	agent, ok := agents[params.AgentID]
+	agent, ok := agents[agentID]
 	if !ok {
-		return fmt.Errorf("%w: %s", ErrAgentNotFound, params.AgentID)
+		return fmt.Errorf("%w: %s", ErrAgentNotFound, agentID)
 	}
 
 	now := time.Now().Unix()
-	agent.Status = params.Status
-	agent.CurrentShardID = params.CurrentShardID
+	agent.Status = status
+	agent.CurrentShardID = currentShardID
 	agent.LastHeartbeatAt = &now
-	agents[params.AgentID] = agent
+	agents[agentID] = agent
 
 	return nil
 }

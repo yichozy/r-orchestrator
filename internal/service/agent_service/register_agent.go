@@ -3,30 +3,32 @@ package agent_service
 import (
 	"fmt"
 	"time"
+
+	"github.com/google/uuid"
 )
 
-func RegisterAgent(params RegisterAgentParams) error {
+func RegisterAgent(agentID string, tenantID uuid.UUID, backendName string) error {
 	mu.Lock()
 	defer mu.Unlock()
 
 	now := time.Now().Unix()
 	registered_agent := Agent{
-		ID:              params.AgentID,
-		TenantID:        params.TenantID,
-		BackendName:     params.BackendName,
+		ID:              agentID,
+		TenantID:        tenantID,
+		BackendName:     backendName,
 		Status:          AgentStatusIdle,
 		LastHeartbeatAt: &now,
 	}
-	if existing_agent, ok := agents[params.AgentID]; ok {
-		if existing_agent.TenantID != params.TenantID || existing_agent.BackendName != params.BackendName {
+	if existing_agent, ok := agents[agentID]; ok {
+		if existing_agent.TenantID != tenantID || existing_agent.BackendName != backendName {
 			return fmt.Errorf(
 				"%w: agent=%s existing=%s/%s requested=%s/%s",
 				ErrAgentIdentityConflict,
-				params.AgentID,
+				agentID,
 				existing_agent.TenantID,
 				existing_agent.BackendName,
-				params.TenantID,
-				params.BackendName,
+				tenantID,
+				backendName,
 			)
 		}
 
@@ -43,14 +45,14 @@ func RegisterAgent(params RegisterAgentParams) error {
 		case AgentStatusRunning:
 			registered_agent.Status = existing_agent.Status
 			registered_agent.CurrentShardID = existing_agent.CurrentShardID
-			return fmt.Errorf("%w: %s already has an active control stream", ErrAgentIdentityConflict, params.AgentID)
+			return fmt.Errorf("%w: %s already has an active control stream", ErrAgentIdentityConflict, agentID)
 		case AgentStatusIdle:
-			return fmt.Errorf("%w: %s is already registered", ErrAgentIdentityConflict, params.AgentID)
+			return fmt.Errorf("%w: %s is already registered", ErrAgentIdentityConflict, agentID)
 		default:
 		}
 	}
 
-	agents[params.AgentID] = registered_agent
+	agents[agentID] = registered_agent
 
 	return nil
 }

@@ -60,11 +60,7 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 		return status.Error(codes.Unauthenticated, fmt.Errorf("tenant %s token mismatch", tenantID).Error())
 	}
 
-	if err := agent_service.RegisterAgent(agent_service.RegisterAgentParams{
-		AgentID:     agentID,
-		TenantID:    tenantID,
-		BackendName: register.GetBackendName(),
-	}); err != nil {
+	if err := agent_service.RegisterAgent(agentID, tenantID, register.GetBackendName()); err != nil {
 		server.logger.Warn("agent registration rejected",
 			zap.String("agent_id", agentID),
 			zap.Stringer("tenant_id", tenantID),

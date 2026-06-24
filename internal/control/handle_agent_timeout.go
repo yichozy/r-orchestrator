@@ -44,11 +44,7 @@ func (server *Server) HandleAgentTimeout(agentID string, reason string) {
 	// For grace_expired, the agent is still DISCONNECTED. Mark as TIMED_OUT
 	// so it's excluded from active tenant counts.
 	if reason == "grace_expired" {
-		if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
-			AgentID:        agentID,
-			Status:         agent_service.AgentStatusTimedOut,
-			CurrentShardID: nil,
-		}); err != nil {
+		if err := agent_service.HeartbeatAgent(agentID, agent_service.AgentStatusTimedOut, nil); err != nil {
 			server.logger.Warn("mark grace-expired agent as timed out",
 				zap.String("agent_id", agentID),
 				zap.Error(err),

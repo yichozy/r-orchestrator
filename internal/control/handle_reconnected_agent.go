@@ -16,11 +16,7 @@ import (
 // already rolled back.
 func (server *Server) HandleReconnectedAgent(sess *agentSession, agent agent_service.Agent) (agent_service.Agent, error) {
 	if agent.Status == agent_service.AgentStatusRunning {
-		if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
-			AgentID:        agent.ID,
-			Status:         agent_service.AgentStatusIdle,
-			CurrentShardID: nil,
-		}); err != nil {
+		if err := agent_service.HeartbeatAgent(agent.ID, agent_service.AgentStatusIdle, nil); err != nil {
 			return agent_service.Agent{}, status.Errorf(codes.Internal, "reset stale agent state: %v", err)
 		}
 

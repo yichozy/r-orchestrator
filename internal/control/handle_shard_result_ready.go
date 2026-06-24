@@ -72,11 +72,7 @@ func (server *Server) HandleShardResultReady(sess *agentSession, shard_ready *co
 
 // resetAgentAndAssign resets the agent to IDLE and tries to assign the next shard.
 func (server *Server) resetAgentAndAssign(sess *agentSession) error {
-	if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
-		AgentID:        sess.agentID,
-		Status:         agent_service.AgentStatusIdle,
-		CurrentShardID: nil,
-	}); err != nil {
+	if err := agent_service.HeartbeatAgent(sess.agentID, agent_service.AgentStatusIdle, nil); err != nil {
 		return status.Errorf(codes.Internal, "reset agent idle: %v", err)
 	}
 	return server.TryAssignShard(sess)

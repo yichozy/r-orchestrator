@@ -38,11 +38,7 @@ func (server *Server) HandleHeartbeat(sess *agentSession, heartbeat *controlv1.H
 		shardID = &sid
 	}
 
-	if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
-		AgentID:        sess.agentID,
-		Status:         heartbeat.GetStatus(),
-		CurrentShardID: shardID,
-	}); err != nil {
+	if err := agent_service.HeartbeatAgent(sess.agentID, heartbeat.GetStatus(), shardID); err != nil {
 		if errors.Is(err, agent_service.ErrAgentNotFound) {
 			return status.Error(codes.NotFound, err.Error())
 		}

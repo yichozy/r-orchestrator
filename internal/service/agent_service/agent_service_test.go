@@ -28,11 +28,7 @@ func TestRegisterAgentAndHeartbeat(t *testing.T) {
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 	shard1 := "shard-001"
 
-	if err := RegisterAgent(RegisterAgentParams{
-		AgentID:     agent1,
-		TenantID:    tenantA,
-		BackendName: "backend-a",
-	}); err != nil {
+	if err := RegisterAgent(agent1, tenantA, "backend-a"); err != nil {
 		t.Fatalf("register agent: %v", err)
 	}
 
@@ -47,11 +43,7 @@ func TestRegisterAgentAndHeartbeat(t *testing.T) {
 		t.Fatalf("expected heartbeat timestamp")
 	}
 
-	if err := HeartbeatAgent(HeartbeatAgentParams{
-		AgentID:        agent1,
-		Status:         "RUNNING",
-		CurrentShardID: &shard1,
-	}); err != nil {
+	if err := HeartbeatAgent(agent1, "RUNNING", &shard1); err != nil {
 		t.Fatalf("heartbeat agent: %v", err)
 	}
 
@@ -73,14 +65,12 @@ func TestRegisterAgentPreservesRunningStateForSameIdentityReconnect(t *testing.T
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 	shard1 := "shard-001"
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
-	HeartbeatAgent(HeartbeatAgentParams{AgentID: agent1, Status: AgentStatusRunning, CurrentShardID: &shard1})
+	RegisterAgent(agent1, tenantA, "backend-a")
+	HeartbeatAgent(agent1, AgentStatusRunning, &shard1)
 
 	DisconnectAgent(agent1)
 
-	if err := RegisterAgent(RegisterAgentParams{
-		AgentID: agent1, TenantID: tenantA, BackendName: "backend-a",
-	}); err != nil {
+	if err := RegisterAgent(agent1, tenantA, "backend-a"); err != nil {
 		t.Fatalf("re-register disconnected agent: %v", err)
 	}
 
@@ -99,17 +89,13 @@ func TestRegisterAgentRejectsCrossTenantOrBackendRebind(t *testing.T) {
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 	tenantB := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
+	RegisterAgent(agent1, tenantA, "backend-a")
 
-	if err := RegisterAgent(RegisterAgentParams{
-		AgentID: agent1, TenantID: tenantB, BackendName: "backend-a",
-	}); err == nil {
+	if err := RegisterAgent(agent1, tenantB, "backend-a"); err == nil {
 		t.Fatalf("expected cross-tenant rebind to fail")
 	}
 
-	if err := RegisterAgent(RegisterAgentParams{
-		AgentID: agent1, TenantID: tenantA, BackendName: "backend-b",
-	}); err == nil {
+	if err := RegisterAgent(agent1, tenantA, "backend-b"); err == nil {
 		t.Fatalf("expected cross-backend rebind to fail")
 	}
 
@@ -127,15 +113,15 @@ func TestGetActiveTenantIDs(t *testing.T) {
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 	tenantB := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
+	RegisterAgent(agent1, tenantA, "backend-a")
 
 	tenants := GetActiveTenantIDs()
 	if len(tenants) != 1 || !tenants[tenantA] {
 		t.Fatalf("expected tenantA to be active, got %v", tenants)
 	}
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent2, TenantID: tenantA, BackendName: "backend-a"})
-	RegisterAgent(RegisterAgentParams{AgentID: agent3, TenantID: tenantB, BackendName: "backend-b"})
+	RegisterAgent(agent2, tenantA, "backend-a")
+	RegisterAgent(agent3, tenantB, "backend-b")
 
 	tenants = GetActiveTenantIDs()
 	if len(tenants) != 2 || !tenants[tenantA] || !tenants[tenantB] {
@@ -148,7 +134,7 @@ func TestGetActiveTenantIDsExcludesDisconnected(t *testing.T) {
 	agent1 := "pod-agent-0"
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
+	RegisterAgent(agent1, tenantA, "backend-a")
 
 	tenants := GetActiveTenantIDs()
 	if len(tenants) != 1 || !tenants[tenantA] {
@@ -168,7 +154,7 @@ func TestGetActiveTenantIDsIncludesUnresponsive(t *testing.T) {
 	agent1 := "pod-agent-0"
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
+	RegisterAgent(agent1, tenantA, "backend-a")
 
 	mu.Lock()
 	agent := agents[agent1]
@@ -187,7 +173,7 @@ func TestGetActiveTenantIDsExcludesTimedOut(t *testing.T) {
 	agent1 := "pod-agent-0"
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
+	RegisterAgent(agent1, tenantA, "backend-a")
 
 	mu.Lock()
 	agent := agents[agent1]
@@ -207,8 +193,8 @@ func TestDisconnectAndReconnect(t *testing.T) {
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 	shard1 := "shard-001"
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
-	HeartbeatAgent(HeartbeatAgentParams{AgentID: agent1, Status: "RUNNING", CurrentShardID: &shard1})
+	RegisterAgent(agent1, tenantA, "backend-a")
+	HeartbeatAgent(agent1, "RUNNING", &shard1)
 
 	DisconnectAgent(agent1)
 	agent := agents[agent1]
@@ -219,7 +205,7 @@ func TestDisconnectAndReconnect(t *testing.T) {
 		t.Fatalf("expected PreDisconnectStatus RUNNING, got %q", agent.PreDisconnectStatus)
 	}
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
+	RegisterAgent(agent1, tenantA, "backend-a")
 	agent = agents[agent1]
 	if agent.Status != "RUNNING" {
 		t.Fatalf("expected RUNNING after reconnect, got %q", agent.Status)
@@ -234,7 +220,7 @@ func TestRemoveAgent(t *testing.T) {
 	agent1 := "pod-agent-0"
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
+	RegisterAgent(agent1, tenantA, "backend-a")
 	if _, ok := agents[agent1]; !ok {
 		t.Fatalf("expected agent to exist")
 	}
@@ -250,7 +236,7 @@ func TestDisconnectIdleAgentReconnectsAsIdle(t *testing.T) {
 	agent1 := "pod-agent-0"
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
+	RegisterAgent(agent1, tenantA, "backend-a")
 	DisconnectAgent(agent1)
 
 	agent := agents[agent1]
@@ -261,7 +247,7 @@ func TestDisconnectIdleAgentReconnectsAsIdle(t *testing.T) {
 		t.Fatalf("expected PreDisconnectStatus IDLE, got %q", agent.PreDisconnectStatus)
 	}
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
+	RegisterAgent(agent1, tenantA, "backend-a")
 	agent = agents[agent1]
 	if agent.Status != "IDLE" {
 		t.Fatalf("expected IDLE after reconnect, got %q", agent.Status)
@@ -273,15 +259,11 @@ func TestRegisterAgentRejectsDuplicateLiveConnection(t *testing.T) {
 	agent1 := "pod-agent-0"
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
-	if err := RegisterAgent(RegisterAgentParams{
-		AgentID: agent1, TenantID: tenantA, BackendName: "backend-a",
-	}); err != nil {
+	if err := RegisterAgent(agent1, tenantA, "backend-a"); err != nil {
 		t.Fatalf("register agent: %v", err)
 	}
 
-	if err := RegisterAgent(RegisterAgentParams{
-		AgentID: agent1, TenantID: tenantA, BackendName: "backend-a",
-	}); err == nil {
+	if err := RegisterAgent(agent1, tenantA, "backend-a"); err == nil {
 		t.Fatalf("expected duplicate live register to fail")
 	}
 }
@@ -298,7 +280,7 @@ func TestHeartbeatTimeoutTransitionsToUnresponsive(t *testing.T) {
 	agent1 := "pod-agent-0"
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
+	RegisterAgent(agent1, tenantA, "backend-a")
 	ResetHeartbeat(agent1)
 
 	time.Sleep(250 * time.Millisecond)
@@ -327,8 +309,8 @@ func TestSecondHeartbeatTimeoutTransitionsToTimedOut(t *testing.T) {
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 	shard1 := "shard-001"
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
-	HeartbeatAgent(HeartbeatAgentParams{AgentID: agent1, Status: "RUNNING", CurrentShardID: &shard1})
+	RegisterAgent(agent1, tenantA, "backend-a")
+	HeartbeatAgent(agent1, "RUNNING", &shard1)
 	ResetHeartbeat(agent1)
 
 	time.Sleep(200 * time.Millisecond)
@@ -362,8 +344,8 @@ func TestHeartbeatResetsUnresponsiveBack(t *testing.T) {
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 	shard1 := "shard-001"
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
-	HeartbeatAgent(HeartbeatAgentParams{AgentID: agent1, Status: "RUNNING", CurrentShardID: &shard1})
+	RegisterAgent(agent1, tenantA, "backend-a")
+	HeartbeatAgent(agent1, "RUNNING", &shard1)
 	ResetHeartbeat(agent1)
 
 	time.Sleep(250 * time.Millisecond)
@@ -372,7 +354,7 @@ func TestHeartbeatResetsUnresponsiveBack(t *testing.T) {
 	}
 
 	CancelTimer(agent1)
-	HeartbeatAgent(HeartbeatAgentParams{AgentID: agent1, Status: "RUNNING", CurrentShardID: &shard1})
+	HeartbeatAgent(agent1, "RUNNING", &shard1)
 
 	agent := agents[agent1]
 	if agent.Status != AgentStatusRunning {
@@ -395,7 +377,7 @@ func TestGraceTimerFiresOnTimeout(t *testing.T) {
 	agent1 := "pod-agent-0"
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
+	RegisterAgent(agent1, tenantA, "backend-a")
 	DisconnectAgent(agent1)
 	BeginGrace(agent1)
 
@@ -420,7 +402,7 @@ func TestCancelTimerPreventsFiring(t *testing.T) {
 	agent1 := "pod-agent-0"
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
+	RegisterAgent(agent1, tenantA, "backend-a")
 	ResetHeartbeat(agent1)
 	CancelTimer(agent1)
 
@@ -435,7 +417,7 @@ func TestRegisterAgentRecoversFromTimedOut(t *testing.T) {
 	agent1 := "pod-agent-0"
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
+	RegisterAgent(agent1, tenantA, "backend-a")
 
 	mu.Lock()
 	agent := agents[agent1]
@@ -450,9 +432,7 @@ func TestRegisterAgentRecoversFromTimedOut(t *testing.T) {
 		t.Fatalf("expected DISCONNECTED, got %q", disconnected.Status)
 	}
 
-	if err := RegisterAgent(RegisterAgentParams{
-		AgentID: agent1, TenantID: tenantA, BackendName: "backend-a",
-	}); err != nil {
+	if err := RegisterAgent(agent1, tenantA, "backend-a"); err != nil {
 		t.Fatalf("reconnect from TIMED_OUT: %v", err)
 	}
 
@@ -468,8 +448,8 @@ func TestRegisterAgentRecoversFromUnresponsive(t *testing.T) {
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 	shard1 := "shard-001"
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
-	HeartbeatAgent(HeartbeatAgentParams{AgentID: agent1, Status: "RUNNING", CurrentShardID: &shard1})
+	RegisterAgent(agent1, tenantA, "backend-a")
+	HeartbeatAgent(agent1, "RUNNING", &shard1)
 
 	mu.Lock()
 	agent := agents[agent1]
@@ -483,9 +463,7 @@ func TestRegisterAgentRecoversFromUnresponsive(t *testing.T) {
 		t.Fatalf("expected DISCONNECTED, got %q", disconnected.Status)
 	}
 
-	if err := RegisterAgent(RegisterAgentParams{
-		AgentID: agent1, TenantID: tenantA, BackendName: "backend-a",
-	}); err != nil {
+	if err := RegisterAgent(agent1, tenantA, "backend-a"); err != nil {
 		t.Fatalf("reconnect from UNRESPONSIVE: %v", err)
 	}
 
@@ -504,7 +482,7 @@ func TestStaleTimerFireIgnored(t *testing.T) {
 	agent1 := "pod-agent-0"
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
+	RegisterAgent(agent1, tenantA, "backend-a")
 	ResetHeartbeat(agent1)
 
 	RemoveAgent(agent1)
@@ -524,7 +502,7 @@ func TestHeartbeatTimerResetPreventsTimeout(t *testing.T) {
 	agent1 := "pod-agent-0"
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
+	RegisterAgent(agent1, tenantA, "backend-a")
 
 	for i := 0; i < 5; i++ {
 		ResetHeartbeat(agent1)
@@ -546,7 +524,7 @@ func TestDisconnectOfUnresponsiveAgent(t *testing.T) {
 	agent1 := "pod-agent-0"
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
-	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
+	RegisterAgent(agent1, tenantA, "backend-a")
 
 	mu.Lock()
 	agent := agents[agent1]

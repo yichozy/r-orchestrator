@@ -33,18 +33,6 @@ type Agent struct {
 	LastHeartbeatAt     *int64
 }
 
-type RegisterAgentParams struct {
-	AgentID     string
-	TenantID    uuid.UUID
-	BackendName string
-}
-
-type HeartbeatAgentParams struct {
-	AgentID        string
-	Status         string
-	CurrentShardID *string
-}
-
 var (
 	mu     sync.Mutex
 	agents map[string]Agent
