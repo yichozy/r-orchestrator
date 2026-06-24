@@ -192,6 +192,19 @@ func onHeartbeatTimeout(agentID string) {
 		return
 	}
 
+	// Guard against stale timer callbacks. ResetHeartbeat creates a new timer
+	// but can't cancel an already-fired callback from the previous timer.
+	// If the agent sent a heartbeat after this timer was scheduled, the
+	// callback is stale — re-arm and skip.
+	if agent.LastHeartbeatAt != nil {
+		elapsed := time.Since(time.Unix(*agent.LastHeartbeatAt, 0))
+		if elapsed < heartbeatTimeout {
+			mu.Unlock()
+			ResetHeartbeat(agentID)
+			return
+		}
+	}
+
 	switch agent.Status {
 	case AgentStatusDisconnected, AgentStatusTimedOut:
 		mu.Unlock()
@@ -226,7 +239,10 @@ func onGraceExpired(agentID string) {
 
 	mu.Lock()
 	agent, ok := agents[agentID]
-	if !ok || agent.Status == AgentStatusTimedOut {
+	// Only fire if the agent is still DISCONNECTED. If the agent reconnected
+	// (status changed to IDLE/RUNNING) or was already handled (TIMED_OUT),
+	// this callback is stale and should be skipped.
+	if !ok || agent.Status != AgentStatusDisconnected {
 		mu.Unlock()
 		return
 	}

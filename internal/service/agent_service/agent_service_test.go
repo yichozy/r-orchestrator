@@ -396,8 +396,8 @@ func TestGraceTimerFiresOnTimeout(t *testing.T) {
 	tenantA := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
 	RegisterAgent(RegisterAgentParams{AgentID: agent1, TenantID: tenantA, BackendName: "backend-a"})
-	CancelTimer(agent1)
-		BeginGrace(agent1)
+	DisconnectAgent(agent1)
+	BeginGrace(agent1)
 
 	time.Sleep(100 * time.Millisecond)
 
