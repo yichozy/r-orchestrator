@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/yichozy/r-orchestrator/internal/config"
 	"go.uber.org/zap"
 )
 
@@ -35,29 +34,14 @@ type Agent struct {
 
 var (
 	mu     sync.Mutex
-	agents map[string]Agent
+	agents = make(map[string]Agent)
 
 	timerMu          sync.Mutex
-	timers           map[string]*time.Timer
-	heartbeatTimeout time.Duration
-	gracePeriod      time.Duration
+	timers           = make(map[string]*time.Timer)
+	heartbeatTimeout = 30 * time.Second
+	gracePeriod      = 5 * time.Minute
 	onTimeout        TimeoutCallback
-	logger           *zap.Logger
 )
-
-func Init() {
-	mu.Lock()
-	defer mu.Unlock()
-
-	timerMu.Lock()
-	defer timerMu.Unlock()
-
-	agents = map[string]Agent{}
-	timers = map[string]*time.Timer{}
-	logger = zap.L().Named("agent_service")
-	heartbeatTimeout = config.GlobalConfig.Cluster.AgentHeartbeatTimeout
-	gracePeriod = config.GlobalConfig.Cluster.AgentDisconnectGrace
-}
 
 // SetTimeoutCallback sets the timeout callback.
 func SetTimeoutCallback(cb TimeoutCallback) {
@@ -66,7 +50,7 @@ func SetTimeoutCallback(cb TimeoutCallback) {
 	onTimeout = cb
 }
 
-// SetTimeouts overrides heartbeat and grace timeouts. For testing only.
+// SetTimeouts overrides heartbeat and grace timeouts.
 func SetTimeouts(hb, gp time.Duration) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -213,7 +197,7 @@ func onHeartbeatTimeout(agentID string) {
 		agent.Status = AgentStatusUnresponsive
 		agents[agentID] = agent
 		mu.Unlock()
-		logger.Warn("agent unresponsive, waiting for one more heartbeat",
+		zap.L().Named("agent_service").Warn("agent unresponsive, waiting for one more heartbeat",
 			zap.String("agent_id", agentID),
 		)
 		ResetHeartbeat(agentID)
@@ -227,9 +211,6 @@ func onGraceExpired(agentID string) {
 
 	mu.Lock()
 	agent, ok := agents[agentID]
-	// Only fire if the agent is still DISCONNECTED. If the agent reconnected
-	// (status changed to IDLE/RUNNING) or was already handled (TIMED_OUT),
-	// this callback is stale and should be skipped.
 	if !ok || agent.Status != AgentStatusDisconnected {
 		mu.Unlock()
 		return

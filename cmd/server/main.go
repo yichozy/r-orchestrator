@@ -64,7 +64,7 @@ func main() {
 		return
 	}
 
-	agent_service.Init()
+	agent_service.SetTimeouts(cfg.Cluster.AgentHeartbeatTimeout, cfg.Cluster.AgentDisconnectGrace)
 
 	registry := backend.NewRegistry()
 	k8s_provider, err := k8s_backend.NewK8sProvider(k8s_backend.Config{

@@ -10,13 +10,16 @@ import (
 
 func setupTest(t *testing.T, cb TimeoutCallback) {
 	t.Helper()
-	Init()
-	SetTimeoutCallback(cb)
+	cancelAllTimers()
+	mu.Lock()
+	agents = make(map[string]Agent)
+	onTimeout = cb
+	mu.Unlock()
 	SetTimeouts(50*time.Millisecond, 50*time.Millisecond)
 	t.Cleanup(func() {
 		cancelAllTimers()
 		mu.Lock()
-		agents = nil
+		agents = make(map[string]Agent)
 		mu.Unlock()
 	})
 }
@@ -271,7 +274,10 @@ func TestRegisterAgentRejectsDuplicateLiveConnection(t *testing.T) {
 // --- Timer tests ---
 
 func TestHeartbeatTimeoutTransitionsToUnresponsive(t *testing.T) {
-	Init()
+	cancelAllTimers()
+	mu.Lock()
+	agents = make(map[string]Agent)
+	mu.Unlock()
 	SetTimeouts(200*time.Millisecond, 200*time.Millisecond)
 	defer func() {
 		cancelAllTimers()
@@ -334,7 +340,10 @@ func TestSecondHeartbeatTimeoutTransitionsToTimedOut(t *testing.T) {
 }
 
 func TestHeartbeatResetsUnresponsiveBack(t *testing.T) {
-	Init()
+	cancelAllTimers()
+	mu.Lock()
+	agents = make(map[string]Agent)
+	mu.Unlock()
 	SetTimeouts(200*time.Millisecond, 200*time.Millisecond)
 	defer func() {
 		cancelAllTimers()
