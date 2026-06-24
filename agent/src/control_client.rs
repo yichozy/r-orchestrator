@@ -181,6 +181,7 @@ pub async fn run_callback_loop(
 
                             let exec_tx = tx.clone();
                             let exec_shard_id = assign.shard_id.clone();
+                            let exec_task_id = assign.task_id.clone();
                             let exec_script_name = assign.script_name.clone();
                             let exec_bundle_url = assign.bundle_download_url.clone();
                             let exec_output_url = assign.output_upload_url.clone();
@@ -206,6 +207,7 @@ pub async fn run_callback_loop(
                                     &exec_bundle_url,
                                     &exec_output_url,
                                     &exec_output_key,
+                                    &exec_task_id,
                                     &exec_shard_id,
                                     &exec_script_name,
                                     &cancel_token,

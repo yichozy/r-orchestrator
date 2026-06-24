@@ -13,26 +13,6 @@ pub enum ExecutionOutcome {
     },
 }
 
-struct WorkDirGuard {
-    path: PathBuf,
-}
-
-impl WorkDirGuard {
-    fn new(path: PathBuf) -> Self {
-        Self { path }
-    }
-}
-
-impl Drop for WorkDirGuard {
-    fn drop(&mut self) {
-        if let Err(err) = std::fs::remove_dir_all(&self.path) {
-            if self.path.exists() {
-                tracing::warn!(path = %self.path.display(), error = %err, "failed to remove shard work directory");
-            }
-        }
-    }
-}
-
 pub fn cache_dir() -> PathBuf {
     let dir = std::env::var("RORCHESTRATOR_ARTIFACT_CACHE_DIR")
         .unwrap_or_else(|_| "/workspace/cache/artifacts".to_string());
@@ -45,53 +25,65 @@ pub async fn execute_shard(
     bundle_download_url: &str,
     output_upload_url: &str,
     output_oss_key: &str,
+    task_id: &str,
     shard_id: &str,
     script_name: &str,
     cancel_token: &crate::control_client::CancelToken,
 ) -> Result<ExecutionOutcome, Box<dyn std::error::Error + Send + Sync>> {
-    // Phase 1: Download bundle
-    tracing::info!(shard_id, "downloading bundle for shard");
     let cache = cache_dir();
-    let bundle_path = cache.join(format!("bundle-{}.zip", shard_id));
-    oss::download_file(bundle_download_url, &bundle_path).await?;
 
-    // Phase 2: Extract bundle
-    let work_dir = cache.join(format!("work-{}", shard_id));
-    let _work_dir_guard = WorkDirGuard::new(work_dir.clone());
-    if work_dir.exists() {
-        std::fs::remove_dir_all(&work_dir)?;
-    }
-    std::fs::create_dir_all(&work_dir)?;
-    extract_zip(&bundle_path, &work_dir)?;
-    tracing::info!(path = %work_dir.display(), "extracted bundle");
-
-    // Phase 3: Run install.sh
-    let install_sh = work_dir.join("install.sh");
-    if install_sh.exists() {
-        if cancel_token.is_cancelled() {
-            return Ok(ExecutionOutcome::Cancelled);
-        }
-        tracing::info!(script = %install_sh.display(), "running install.sh");
-        let output = Command::new("bash")
-            .current_dir(&work_dir)
-            .arg(&install_sh)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .await?;
-
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        if !output.status.success() {
-            let code = output.status.code().unwrap_or(-1);
-            return Err(format!("install.sh failed (exit {code}): {stderr}").into());
-        } else if !stderr.is_empty() {
-            tracing::warn!(stderr = %stderr, "install.sh stderr output");
-        } else {
-            tracing::info!("install.sh completed");
-        }
+    // Phase 1: Download bundle (cached per task — all shards share the same bundle).
+    let bundle_path = cache.join(format!("bundle-{task_id}.zip"));
+    if !bundle_path.exists() {
+        tracing::info!(task_id, shard_id, "downloading bundle for task");
+        oss::download_file(bundle_download_url, &bundle_path).await?;
+    } else {
+        tracing::info!(task_id, shard_id, "bundle already cached, skipping download");
     }
 
-    // Phase 4: Run cmd/{script_name}
+    // Phase 2: Extract bundle + run install.sh (once per task).
+    let work_dir = cache.join(format!("work-{task_id}"));
+    let install_sentinel = work_dir.join(".install-done");
+    if !install_sentinel.exists() {
+        if work_dir.exists() {
+            std::fs::remove_dir_all(&work_dir)?;
+        }
+        std::fs::create_dir_all(&work_dir)?;
+        extract_zip(&bundle_path, &work_dir)?;
+        tracing::info!(task_id, path = %work_dir.display(), "extracted bundle");
+
+        // Run install.sh on first extraction only.
+        let install_sh = work_dir.join("install.sh");
+        if install_sh.exists() {
+            if cancel_token.is_cancelled() {
+                return Ok(ExecutionOutcome::Cancelled);
+            }
+            tracing::info!(task_id, script = %install_sh.display(), "running install.sh");
+            let output = Command::new("bash")
+                .current_dir(&work_dir)
+                .arg(&install_sh)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .output()
+                .await?;
+
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            if !output.status.success() {
+                let code = output.status.code().unwrap_or(-1);
+                return Err(format!("install.sh failed (exit {code}): {stderr}").into());
+            } else if !stderr.is_empty() {
+                tracing::warn!(task_id, stderr = %stderr, "install.sh stderr output");
+            } else {
+                tracing::info!(task_id, "install.sh completed");
+            }
+        }
+        // Mark install as done so subsequent shards skip it.
+        std::fs::write(&install_sentinel, "")?;
+    } else {
+        tracing::info!(task_id, shard_id, "work directory already prepared, skipping extract + install");
+    }
+
+    // Phase 3: Run cmd/{script_name} (always — each shard is a different script).
     let script_path = work_dir.join("cmd").join(script_name);
     if !script_path.exists() {
         return Err(format!("script not found: {}", script_path.display()).into());
@@ -100,8 +92,14 @@ pub async fn execute_shard(
     if cancel_token.is_cancelled() {
         return Ok(ExecutionOutcome::Cancelled);
     }
-    tracing::info!(shard_id, script = %script_path.display(), "executing script");
 
+    // Clean output directory so each shard starts fresh.
+    let output_dir = work_dir.join("output");
+    if output_dir.exists() {
+        std::fs::remove_dir_all(&output_dir)?;
+    }
+
+    tracing::info!(shard_id, task_id, script = %script_path.display(), "executing script");
     let output = Command::new("bash")
         .current_dir(&work_dir)
         .arg(&script_path)
@@ -120,22 +118,21 @@ pub async fn execute_shard(
     }
     tracing::info!(shard_id, "script completed");
 
-    // Phase 5: Collect output files and create output zip
-    let output_dir = work_dir.join("output");
-    let output_zip_path = cache.join(format!("output-{}.zip", shard_id));
+    // Phase 4: Collect output files and create output zip.
+    let output_zip_path = cache.join(format!("output-{shard_id}.zip"));
     if output_dir.exists() {
         create_output_zip(&output_dir, &output_zip_path)?;
     } else {
         create_empty_zip(&output_zip_path)?;
     }
 
-    // Phase 6: Compute SHA256 and upload to OSS
+    // Phase 5: Compute SHA256 and upload to OSS.
     let zip_bytes = std::fs::read(&output_zip_path)?;
     let sha256 = sha256_hex(&zip_bytes);
 
     oss::upload_file(output_upload_url, &output_zip_path).await?;
 
-    // Phase 7: Return result
+    // Phase 6: Return result.
     tracing::info!(shard_id, %output_oss_key, sha256, "shard execution finished");
     Ok(ExecutionOutcome::ResultReady {
         shard_id: shard_id.to_string(),
