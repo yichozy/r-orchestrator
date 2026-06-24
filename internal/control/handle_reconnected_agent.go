@@ -16,11 +16,14 @@ import (
 // already rolled back.
 func (server *Server) HandleReconnectedAgent(sess *agentSession, agent agent_service.Agent) (agent_service.Agent, error) {
 	if agent.Status == agent_service.AgentStatusRunning {
-		var err error
-		agent, err = server.resetRegisteredAgentToIdle(agent.ID)
-		if err != nil {
-			return agent_service.Agent{}, err
+		if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+			AgentID:        agent.ID,
+			Status:         agent_service.AgentStatusIdle,
+			CurrentShardID: nil,
+		}); err != nil {
+			return agent_service.Agent{}, status.Errorf(codes.Internal, "reset stale agent state: %v", err)
 		}
+
 		// Roll back stale shards from before reconnect so they're re-queued
 		// immediately rather than waiting for the next IDLE heartbeat.
 		if n, rollbackErr := task_service.RollbackOrphanShardsForAgent(sess.Context(), agent.ID); rollbackErr != nil {
@@ -34,6 +37,12 @@ func (server *Server) HandleReconnectedAgent(sess *agentSession, agent agent_ser
 				zap.Int("count", n),
 			)
 		}
+
+		var err error
+		agent, err = agent_service.GetAgent(agent.ID)
+		if err != nil {
+			return agent_service.Agent{}, status.Errorf(codes.Internal, "get reset agent: %v", err)
+		}
 	}
 
 	if agent.Status != agent_service.AgentStatusIdle {
@@ -42,21 +51,4 @@ func (server *Server) HandleReconnectedAgent(sess *agentSession, agent agent_ser
 
 	// IDLE — try to assign new shard.
 	return agent, server.TryAssignShard(sess)
-}
-
-func (server *Server) resetRegisteredAgentToIdle(agentID string) (agent_service.Agent, error) {
-	if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
-		AgentID:        agentID,
-		Status:         agent_service.AgentStatusIdle,
-		CurrentShardID: nil,
-	}); err != nil {
-		return agent_service.Agent{}, status.Errorf(codes.Internal, "reset stale agent state: %v", err)
-	}
-
-	agent, err := agent_service.GetAgent(agentID)
-	if err != nil {
-		return agent_service.Agent{}, status.Errorf(codes.Internal, "get reset agent: %v", err)
-	}
-
-	return agent, nil
 }
