@@ -22,13 +22,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     r-base \
     r-base-dev \
     gfortran \
-    r-cran-optparse \
-    r-cran-foreach \
-    r-cran-doparallel \
   && rm -rf /var/lib/apt/lists/*
 
-# Packages not in Debian repos — install from CRAN.
-RUN R -e 'options(Ncpus = parallel::detectCores()); install.packages("rpact", repos = "https://cloud.r-project.org")'
+# All R packages from CRAN for consistent versions.
+RUN R -e 'options(Ncpus = parallel::detectCores()); install.packages(c("optparse", "foreach", "doParallel", "rpact"), repos = "https://cloud.r-project.org")'
 
 COPY --from=builder /src/target/release/agent /usr/local/bin/r-agent
 ENTRYPOINT ["/usr/local/bin/r-agent"]
