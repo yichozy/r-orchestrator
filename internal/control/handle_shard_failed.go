@@ -3,6 +3,7 @@ package control
 import (
 	"github.com/google/uuid"
 	"github.com/yichozy/r-orchestrator/internal/model"
+	"github.com/yichozy/r-orchestrator/internal/service/agent_service"
 	"github.com/yichozy/r-orchestrator/internal/service/task_service"
 	controlv1 "github.com/yichozy/r-orchestrator/proto"
 	"go.uber.org/zap"
@@ -47,8 +48,9 @@ func (server *Server) HandleShardFailed(sess *agentSession, shard_failed *contro
 		zap.Stringer("shard_id", shardID),
 		zap.String("shard_status", shard.Status),
 	)
-	if server.agentCurrentShardIs(sess.agentID, shardID) {
-		return server.resetAgentAndAssign(sess)
+	agent, agentErr := agent_service.GetAgent(sess.agentID)
+	if agentErr != nil || agent.CurrentShardID == nil || *agent.CurrentShardID != shardID.String() {
+		return nil
 	}
-	return nil
+	return server.resetAgentAndAssign(sess)
 }

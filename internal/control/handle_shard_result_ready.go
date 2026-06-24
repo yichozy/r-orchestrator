@@ -22,6 +22,12 @@ func (server *Server) HandleShardResultReady(sess *agentSession, shard_ready *co
 		return err
 	}
 
+	ack := &controlv1.ServerMessage{
+		Payload: &controlv1.ServerMessage_ShardResultStored{
+			ShardResultStored: &controlv1.ShardResultStored{ShardId: shardID.String()},
+		},
+	}
+
 	// Normal path: shard is RUNNING, mark it SUCCEEDED.
 	if shard.Status == model.ShardStatusRunning {
 		if err := task_service.ReportShardStatus(sess.Context(), task_service.ReportShardStatusParams{
@@ -37,7 +43,10 @@ func (server *Server) HandleShardResultReady(sess *agentSession, shard_ready *co
 			zap.Stringer("shard_id", shardID),
 			zap.String("output_oss_key", shard_ready.GetOutputOssKey()),
 		)
-		return server.ackShardResultAndReset(sess, shardID)
+		if err := sess.Send(ack); err != nil {
+			return err
+		}
+		return server.resetAgentAndAssign(sess)
 	}
 
 	// Shard is not RUNNING — already SUCCEEDED, CANCELLED, or rolled back to
@@ -51,20 +60,11 @@ func (server *Server) HandleShardResultReady(sess *agentSession, shard_ready *co
 		zap.String("shard_status", shard.Status),
 	)
 
-	if server.agentCurrentShardIs(sess.agentID, shardID) {
-		return server.ackShardResultAndReset(sess, shardID)
+	agent, agentErr := agent_service.GetAgent(sess.agentID)
+	if agentErr != nil || agent.CurrentShardID == nil || *agent.CurrentShardID != shardID.String() {
+		return sess.Send(ack)
 	}
-	return sess.Send(&controlv1.ServerMessage{
-		Payload: &controlv1.ServerMessage_ShardResultStored{
-			ShardResultStored: &controlv1.ShardResultStored{ShardId: shardID.String()},
-		},
-	})
-}
-
-// ackShardResultAndReset sends the ShardResultStored ack, resets the agent to
-// IDLE, and tries to assign the next shard.
-func (server *Server) ackShardResultAndReset(sess *agentSession, shardID uuid.UUID) error {
-	if err := sess.Send(&controlv1.ServerMessage{Payload: &controlv1.ServerMessage_ShardResultStored{ShardResultStored: &controlv1.ShardResultStored{ShardId: shardID.String()}}}); err != nil {
+	if err := sess.Send(ack); err != nil {
 		return err
 	}
 	return server.resetAgentAndAssign(sess)
@@ -80,15 +80,4 @@ func (server *Server) resetAgentAndAssign(sess *agentSession) error {
 		return status.Errorf(codes.Internal, "reset agent idle: %v", err)
 	}
 	return server.TryAssignShard(sess)
-}
-
-// agentCurrentShardIs returns true if the agent's current shard matches the
-// given shard ID. Used to distinguish a stale report (agent moved on) from one
-// that the agent is still waiting on.
-func (server *Server) agentCurrentShardIs(agentID string, shardID uuid.UUID) bool {
-	agent, err := agent_service.GetAgent(agentID)
-	if err != nil {
-		return false
-	}
-	return agent.CurrentShardID != nil && *agent.CurrentShardID == shardID.String()
 }
