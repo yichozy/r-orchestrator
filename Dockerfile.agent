@@ -13,15 +13,22 @@ COPY proto proto
 RUN touch agent/src/main.rs && cargo build -p agent --release --locked
 
 FROM debian:bookworm-slim
+
+# r-base includes survival (recommended package).
+# r-base-dev + gfortran are kept for install.sh that may compile R packages.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     bash \
     r-base \
+    r-base-dev \
+    gfortran \
     r-cran-optparse \
     r-cran-foreach \
     r-cran-doparallel \
-    r-cran-survival \
-    r-cran-rpact \
   && rm -rf /var/lib/apt/lists/*
+
+# Packages not in Debian repos — install from CRAN.
+RUN R -e 'options(Ncpus = parallel::detectCores()); install.packages("rpact", repos = "https://cloud.r-project.org")'
+
 COPY --from=builder /src/target/release/agent /usr/local/bin/r-agent
 ENTRYPOINT ["/usr/local/bin/r-agent"]
