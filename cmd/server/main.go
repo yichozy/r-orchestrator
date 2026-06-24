@@ -117,10 +117,14 @@ func main() {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(4)
+	wg.Add(5)
 	go func() {
 		defer wg.Done()
 		task_service.PollPendingTasks(ctx, registry)
+	}()
+	go func() {
+		defer wg.Done()
+		task_service.CleanupOrphanShardsLoop(ctx)
 	}()
 	go func() {
 		defer wg.Done()
