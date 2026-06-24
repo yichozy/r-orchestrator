@@ -1,16 +1,13 @@
 package control
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/yichozy/r-orchestrator/internal/model"
 	"github.com/yichozy/r-orchestrator/internal/service/agent_service"
-	"github.com/yichozy/r-orchestrator/internal/service/task_service"
 	controlv1 "github.com/yichozy/r-orchestrator/proto"
 	"go.uber.org/zap"
 	grpc "google.golang.org/grpc"
@@ -175,7 +172,6 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 			continue
 		}
 
-	
 		if shard_failed := message.GetShardFailed(); shard_failed != nil {
 			if err := server.HandleShardFailed(sess, shard_failed); err != nil {
 				return err
@@ -185,34 +181,4 @@ func (server *Server) OpenControlStream(stream grpc.BidiStreamingServer[controlv
 
 		return status.Error(codes.InvalidArgument, "unsupported control message")
 	}
-}
-
-// completeCurrentWorkAndReassign acks the current shard result, resets the agent
-// to IDLE, and tries to assign the next shard.
-func (server *Server) completeCurrentWorkAndReassign(sess *agentSession, shardID string) error {
-	if err := sess.Send(&controlv1.ServerMessage{Payload: &controlv1.ServerMessage_ShardResultStored{ShardResultStored: &controlv1.ShardResultStored{ShardId: shardID}}}); err != nil {
-		return err
-	}
-	if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
-		AgentID:        sess.agentID,
-		Status:         agent_service.AgentStatusIdle,
-		CurrentShardID: nil,
-	}); err != nil {
-		return err
-	}
-	return server.TryAssignShard(sess)
-}
-
-func (server *Server) rollbackAssignedShard(ctx context.Context, task model.Task, shard model.TaskShard, agentID string) error {
-	if err := task_service.RollbackAssignedShard(ctx, shard.ID, task); err != nil {
-		return err
-	}
-	if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
-		AgentID:        agentID,
-		Status:         agent_service.AgentStatusIdle,
-		CurrentShardID: nil,
-	}); err != nil {
-		return fmt.Errorf("rollback agent heartbeat: %w", err)
-	}
-	return nil
 }

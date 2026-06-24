@@ -37,12 +37,22 @@ func (server *Server) TryAssignShard(sess *agentSession) (ret_err error) {
 		if !should_rollback {
 			return
 		}
-		if rollback_err := server.rollbackAssignedShard(sess.Context(), task, shard, sess.agentID); rollback_err != nil {
+		var rollback_err error
+		if err := task_service.RollbackAssignedShard(sess.Context(), shard.ID, task); err != nil {
+			rollback_err = err
+		} else if err := agent_service.HeartbeatAgent(agent_service.HeartbeatAgentParams{
+			AgentID:        sess.agentID,
+			Status:         agent_service.AgentStatusIdle,
+			CurrentShardID: nil,
+		}); err != nil {
+			rollback_err = fmt.Errorf("rollback agent heartbeat: %w", err)
+		}
+		if rollback_err != nil {
 			if ret_err == nil {
 				ret_err = status.Errorf(codes.Internal, "rollback assigned shard: %v", rollback_err)
-				return
+			} else {
+				ret_err = status.Errorf(codes.Internal, "%v (rollback failed: %v)", ret_err, rollback_err)
 			}
-			ret_err = status.Errorf(codes.Internal, "%v (rollback failed: %v)", ret_err, rollback_err)
 		}
 	}()
 
