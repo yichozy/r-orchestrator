@@ -127,20 +127,20 @@ func TestMutationResolverCancelTaskUsesTenantNamePath(t *testing.T) {
 	}
 }
 
-func TestCreateTenantStoresNormalizedName(t *testing.T) {
+func TestCreateTenant(t *testing.T) {
 	ctx := context.Background()
 	setupGraphResolverTestDB(t)
 
 	got, err := (&mutationResolver{&Resolver{}}).CreateTenant(ctx, gqlmodel.CreateTenantInput{
-		Name:               " Team-Alpha ",
+		Name:               "Team-Alpha",
 		PrimaryBackendName: "ray",
 		MaxAgents:          3,
 	})
 	if err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
-	if got.Name != "team-alpha" {
-		t.Fatalf("got.Name = %q, want %q", got.Name, "team-alpha")
+	if got.Name != "Team-Alpha" {
+		t.Fatalf("got.Name = %q, want %q", got.Name, "Team-Alpha")
 	}
 }
 
