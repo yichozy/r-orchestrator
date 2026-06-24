@@ -119,20 +119,6 @@ func RecycleClusters(ctx context.Context, registry *backend.Registry) {
 					log.Info("cluster terminated successfully")
 					continue
 				}
-
-				if IsExpired(cluster) {
-					log.Info("expired cluster within idle threshold, force renewing")
-					if err := RenewBilling(ctx, db, cluster.ID); err != nil {
-						log.Error("force renew billing failed", zap.Error(err))
-					}
-					continue
-				}
-				if IsNearBoundary(cluster, advanceThreshold) {
-					log.Info("cluster near boundary within idle threshold, renewing billing")
-					if err := RenewBilling(ctx, db, cluster.ID); err != nil {
-						log.Error("renew billing failed", zap.Error(err))
-					}
-				}
 			}
 		}
 	}
