@@ -3,6 +3,8 @@ package control
 import (
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 
 	"github.com/google/uuid"
 	aliyun "github.com/yichozy/hopebox/aliyun"
@@ -68,12 +70,14 @@ func (server *Server) TryAssignShard(sess *agentSession) (ret_err error) {
 	if err != nil {
 		return status.Errorf(codes.Internal, "sign bundle url: %v", err)
 	}
+	bundleURL = fixOSSURLPath(bundleURL)
 
 	outputKey := fmt.Sprintf("r-orchestrator/tasks/%s/output/%s-output.zip", task.ID, shard.ScriptName)
 	outputURL, err := ossClient.SignPutURL(outputKey, 3600)
 	if err != nil {
 		return status.Errorf(codes.Internal, "sign output url: %v", err)
 	}
+	outputURL = fixOSSURLPath(outputURL)
 
 	if err := sess.Send(&controlv1.ServerMessage{
 		Payload: &controlv1.ServerMessage_AssignShard{
@@ -99,4 +103,16 @@ func (server *Server) TryAssignShard(sess *agentSession) (ret_err error) {
 
 	should_rollback = false
 	return nil
+}
+
+// fixOSSURLPath replaces %2F with / in the URL path. The Aliyun OSS SDK
+// URL-encodes object key slashes as %2F in pre-signed URLs, but OSS expects
+// literal slashes in the request path for signature verification.
+func fixOSSURLPath(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	u.Path = strings.ReplaceAll(u.Path, "%2F", "/")
+	return u.String()
 }
